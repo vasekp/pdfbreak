@@ -2,4 +2,6 @@ CXXFLAGS = -std=c++17 -g -Wall -Wextra -pedantic -fno-diagnostics-show-caret -Iz
 
 all: pdfbreak
 
+pdfbreak: pdf.h
+
 .PHONY: all
