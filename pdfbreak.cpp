@@ -29,6 +29,7 @@ int main(int argc, char* argv[]) {
 
     TokenStream ints{infs};
     TopLevelObject obj;
+    unsigned trailercnt = 0;
     while(ints && ints >> obj) {
 #if 1
       if(std::holds_alternative<NamedObject>(obj.contents)) {
@@ -40,18 +41,23 @@ int main(int argc, char* argv[]) {
         std::clog << "Saving: " << oss.str() << '\n';
       } else if(std::holds_alternative<XRefTable>(obj.contents)) {
         const Object& trailer = std::get<XRefTable>(obj.contents).trailer;
+        std::clog << "Skipping xref table\n";
         std::ostringstream oss{};
-        oss << argv[1] << "-trailer.obj";
+        oss << argv[1] << "-trailer" << ++trailercnt << ".obj";
         std::ofstream ofs{oss.str()};
         ofs << "trailer\n" << trailer << '\n';
         std::clog << "Saving: " << oss.str() << '\n';
+      } else if(std::holds_alternative<StartXRef>(obj.contents)) {
+        std::clog << "Skipping startxref marker\n";
       } else {
         std::clog << obj << '\n';
         std::clog << "Skipping till next endobj...\n";
         std::string s;
-        while(std::getline(infs, s)) {
-          if(s.find("endobj") != std::string::npos)
+        while(infs) {
+          s = readToNL(infs);
+          if(!std::strncmp(s.data() + s.length() - 6, "endobj", 6)) {
             break;
+          }
         }
       }
 #else

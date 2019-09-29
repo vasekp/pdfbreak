@@ -72,7 +72,9 @@ class TokenStream {
     return is.good();
   }
 
-  std::istream& istream() { return is; }
+  std::istream& istream() {
+    return is;
+  }
 
   private:
   std::string underflow() {
@@ -247,6 +249,24 @@ void Dictionary::dump(std::ostream& os, unsigned off) const {
 
 bool operator>> (TokenStream& ts, Object&);
 
+void skipToNL(std::istream& is) {
+  char c;
+  while(is.get(c))
+    if(c == '\n' || c == '\r')
+      break;
+}
+
+std::string readToNL(std::istream& is) {
+  std::string s{};
+  char c;
+  while(is.get(c))
+    if(c == '\n' || c == '\r')
+      break;
+    else
+      s.push_back(c);
+  return s;
+}
+
 Object readName(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "/");
@@ -262,18 +282,19 @@ Object readStream(TokenStream& ts, Dictionary&& dict) {
   std::string s = ts.read();
   assert(s == "stream");
   assert(ts.empty());
-  std::getline(is, s);
+  skipToNL(is);
   Object o = dict.val["Length"];
   std::string contents{};
   if(std::holds_alternative<Numeric>(o.contents)) {
     unsigned len = std::get<Numeric>(o.contents).val;
     contents.resize(len);
     is.read(contents.data(), len);
-    std::getline(is, s);
+    skipToNL(is);
     if(ts.read() != "endstream")
       return {Invalid{"Malformed stream (endstream)"}};
   } else {
-    while(std::getline(is, s))
+    while(is) {
+      s = readToNL(is);
       if(std::strncmp(s.data() + s.length() - 9, "endstream", 9)) {
         contents.append(s);
         contents.push_back('\n');
@@ -281,6 +302,7 @@ Object readStream(TokenStream& ts, Dictionary&& dict) {
         contents.append(s.data(), s.length() - 9);
         break;
       }
+    }
   }
   return {Stream{std::move(dict), std::move(contents)}};
 }
@@ -328,7 +350,7 @@ Object readStringLiteral(TokenStream& ts) {
   unsigned parens = 0;
   while(is) {
     char c;
-    is >> c;
+    is.get(c);
     if(c == ')') {
       if(parens > 0) {
         ret.push_back(c);
@@ -339,7 +361,7 @@ Object readStringLiteral(TokenStream& ts) {
       ret.push_back(c);
       parens++;
     } else if(c == '\\') {
-      is >> c;
+      is.get(c);
       switch(c) {
         case 'n':
           ret.push_back('\n');
@@ -360,6 +382,10 @@ Object readStringLiteral(TokenStream& ts) {
         case ')':
         case '\\':
           ret.push_back(c);
+          break;
+        case '\r':
+        case '\n':
+          /* ignore */
           break;
         case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
           {
@@ -396,7 +422,7 @@ Object readStringHex(TokenStream& ts) {
   char d = 0;
   while(is) {
     char c;
-    is >> c;
+    is.get(c);
     if(c == '>') {
       if(odd)
         ret.push_back(16*d);
@@ -426,8 +452,7 @@ void skipComment(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "%");
   assert(ts.empty());
-  std::istream& is = ts.istream();
-  std::getline(is, s);
+  skipToNL(ts.istream());
 }
 
 std::optional<double> toFloat(const std::string& s) {
@@ -572,7 +597,7 @@ TopLevelObject readXRefTable(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "xref");
   std::istream& is = ts.istream();
-  std::getline(is, s);
+  skipToNL(is);
   std::vector<XRefTableSection> sections{};
   while(is) {
     int start, count;
@@ -586,7 +611,7 @@ TopLevelObject readXRefTable(TokenStream& ts) {
     if(!toInt(s))
       return {Invalid{"Broken xref subsection header (count)"}};
     count = *toInt(s);
-    std::getline(is, s);
+    skipToNL(is);
     s.resize(20*count);
     is.read(s.data(), 20*count);
     sections.push_back({start, count, std::move(s)});
