@@ -41,7 +41,8 @@ int main(int argc, char* argv[]) {
         oss << argv[1] << '-' << nmo.num << '.' << nmo.gen << ".obj";
         std::ofstream ofs{oss.str()};
         ofs << obj << '\n';
-        std::clog << "Saving: " << oss.str() << '\n';
+        std::clog << "Saving: " << oss.str()
+          << (obj.failed() ? " (errors)\n" : "\n");
       } else if(std::holds_alternative<XRefTable>(obj.contents)) {
         const Object& trailer = std::get<XRefTable>(obj.contents).trailer;
         std::clog << "Skipping xref table\n";
@@ -53,11 +54,9 @@ int main(int argc, char* argv[]) {
       } else if(std::holds_alternative<StartXRef>(obj.contents)) {
         std::clog << "Skipping startxref marker\n";
       } else {
-        std::clog << obj << '\n';
-        std::clog << "Skipping till next endobj...\n";
-        std::string s;
+        std::clog << "!!! " << std::get<Invalid>(obj.contents).get_error() << '\n';
         while(infs) {
-          s = readToNL(infs);
+          std::string s = readToNL(infs);
           if(s.substr(std::max((int)s.length() - 6, 0)) == "endobj")
             break;
         }
