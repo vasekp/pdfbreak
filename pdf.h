@@ -139,6 +139,8 @@ struct Numeric {
 struct String {
   std::string val;
   bool hex;
+  std::string error;
+
   void dump(std::ostream& os, unsigned off) const {
     if(hex) {
       print_offset(os, off, "<");
@@ -151,7 +153,7 @@ struct String {
     } else {
       print_offset(os, off, "(");
       for(char c : val) {
-        if(c >= 32 /*&& c <= 127 always true*/ && c != '(' && c != ')' && c != '\\')
+        if(c >= 32 && (unsigned char)c <= 127 && c != '(' && c != ')' && c != '\\')
           os << c;
         else {
           char buf[5];
@@ -160,6 +162,10 @@ struct String {
         }
       }
       os << ')';
+    }
+    if(!error.empty()) {
+      os << '\n';
+      print_offset(os, off, "% !!! " + error);
     }
   }
 };
@@ -173,17 +179,20 @@ struct Name {
 
 struct Array {
   std::vector<Object> val;
+  std::string error = "";
   void dump(std::ostream& os, unsigned off) const;
 };
 
 struct Dictionary {
   std::map<std::string, Object> val;
+  std::string error = "";
   void dump(std::ostream& os, unsigned off) const;
 };
 
 struct Stream {
   Dictionary dict;
   std::string data;
+  std::string error = "";
   void dump(std::ostream& os, unsigned off) const {
     dict.dump(os, off);
     os << '\n';
@@ -191,6 +200,10 @@ struct Stream {
     os.write(data.data(), data.length());
     os << '\n';
     print_offset(os, off, "endstream");
+    if(!error.empty()) {
+      os << '\n';
+      print_offset(os, off, "% !!! " + error);
+    }
   }
 };
 
@@ -200,6 +213,13 @@ struct Indirect {
   void dump(std::ostream& os, unsigned off) const {
     print_offset(os, off, "");
     os << num << ' ' << gen << " R";
+  }
+};
+
+struct Invalid {
+  std::string error;
+  void dump(std::ostream& os, unsigned off) const {
+    print_offset(os, off, "% !!! " + error);
   }
 };
 
@@ -213,15 +233,11 @@ struct Object {
     Array,
     Dictionary,
     Stream,
-    Indirect> contents;
-  std::string error = {};
+    Indirect,
+    Invalid> contents;
   
   void dump(std::ostream& os, unsigned off) const {
     std::visit([&os, off](auto&& arg) { arg.dump(os, off); }, contents);
-    if(!error.empty()) {
-      os << '\n';
-      print_offset(os, off, "% !!! " + error);
-    }
   }
 };
 
@@ -231,6 +247,8 @@ void Array::dump(std::ostream& os, unsigned off) const {
     o.dump(os, off+1);
     os << '\n';
   }
+  if(!error.empty())
+    print_offset(os, off + 1, "% !!! " + error + "\n");
   print_offset(os, off, "]");
 }
 
@@ -241,6 +259,8 @@ void Dictionary::dump(std::ostream& os, unsigned off) const {
     v.dump(os, off+2);
     os << '\n';
   }
+  if(!error.empty())
+    print_offset(os, off + 1, "% !!! " + error + "\n");
   print_offset(os, off, ">>");
 }
 
@@ -271,10 +291,10 @@ Object readName(TokenStream& ts) {
   if(charType(s[0]) == CharType::regular)
     return {Name{std::move(s)}};
   else
-    return {Null{}, "/ not followed by a proper name"};
+    return {Invalid{"/ not followed by a proper name"}};
 }
 
-Object readStream(TokenStream& ts, Dictionary&& dict, std::string&& error_inner) {
+Object readStream(TokenStream& ts, Dictionary&& dict) {
   std::istream& is = ts.istream();
   std::string s = ts.read();
   assert(s == "stream");
@@ -304,13 +324,7 @@ Object readStream(TokenStream& ts, Dictionary&& dict, std::string&& error_inner)
     if(!is)
       error = "Reached end of file";
   }
-  if(!error_inner.empty()) {
-    if(!error.empty())
-      error = error_inner + "; " + error;
-    else
-      error = error_inner;
-  }
-  return {Stream{std::move(dict), std::move(contents)}, std::move(error)};
+  return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 
 Object readArray(TokenStream& ts) {
@@ -327,13 +341,13 @@ Object readArray(TokenStream& ts) {
     array.push_back(std::move(o));
   }
   ts.consume();
-  return {Array{std::move(array)}, std::move(error)};
+  return {Array{std::move(array), std::move(error)}};
 }
 
 Object readDict(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "<<");
-  std::map<std::string, Object> dict{};
+  std::map<std::string, Object> tmp{};
   std::string error{};
   while(ts.peek() != ">>") {
     Object o1, o2;
@@ -346,13 +360,14 @@ Object readDict(TokenStream& ts) {
       break;
     }
     std::string name = std::get<Name>(o1.contents).val;
-    dict[name] = std::move(o2);
+    tmp[name] = std::move(o2);
   }
   ts.consume();
+  Dictionary dict{std::move(tmp), std::move(error)};
   if(ts.peek() == "stream")
-    return readStream(ts, Dictionary{std::move(dict)}, std::move(error));
+    return readStream(ts, std::move(dict));
   else
-    return {Dictionary{std::move(dict)}, std::move(error)};
+    return {std::move(dict)};
 }
 
 Object readStringLiteral(TokenStream& ts) {
@@ -425,12 +440,14 @@ Object readStringLiteral(TokenStream& ts) {
           }
           break;
         default:
-          return {String{std::move(ret), false}, "Invalid characters in string"};
+          error = "Invalid characters in string";
+          goto end;
       }
     } else
       ret.push_back(c);
   }
-  return {String{std::move(ret), false}, std::move(error)};
+end:
+  return {String{std::move(ret), false, std::move(error)}};
 }
 
 Object readStringHex(TokenStream& ts) {
@@ -439,6 +456,7 @@ Object readStringHex(TokenStream& ts) {
   assert(ts.empty());
   std::istream& is = ts.istream();
   std::string ret{};
+  std::string error{};
   unsigned odd = 0;
   char d = 0;
   while(is) {
@@ -463,10 +481,12 @@ Object readStringHex(TokenStream& ts) {
       odd ^= 1;
     } else if(c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f')
       /* ignore */;
-    else
-      return {String{std::move(ret), true}, "Invalid character in hex string"};
+    else {
+      error = "Invalid character in hex string";
+      break;
+    }
   }
-  return {String{std::move(ret), true}};
+  return {String{std::move(ret), true, std::move(error)}};
 }
 
 void skipComment(TokenStream& ts) {
@@ -533,7 +553,7 @@ bool operator>> (TokenStream& ts, Object& obj) {
     obj = {Numeric{*toFloat(t)}};
   } else {
     ts.consume();
-    obj = {Null{}, "Unexpected keyword: " + t};
+    obj = {Invalid{"Unexpected keyword: " + t}};
   }
   return true;
 }
@@ -555,6 +575,10 @@ struct NamedObject {
     contents.dump(os, off+1);
     os << '\n';
     print_offset(os, off, "endobj");
+    if(!error.empty()) {
+      os << '\n';
+      print_offset(os, off, "% !!! " + error);
+    }
   }
 };
 
@@ -584,20 +608,12 @@ struct StartXRef {
   }
 };
 
-struct Invalid {
-  std::string error;
-  void dump(std::ostream& os, unsigned off) const {
-    print_offset(os, off, "!!! " + error);
-  }
-};
-
 struct TopLevelObject {
   std::variant<
     NamedObject,
     XRefTable,
     StartXRef,
     Invalid> contents;
-  std::string error = "";
 
   void dump(std::ostream& os, unsigned off) const {
     std::visit([&os, off](auto&& arg) { arg.dump(os, off); }, contents);
@@ -611,7 +627,7 @@ TopLevelObject readNamedObject(TokenStream& ts) {
   int num = *toInt(t);
   t = ts.read();
   if(!toInt(t))
-    return {Invalid{"Misshaped named object header (gen)"}};
+    return {Invalid{"Misshaped named object header (gen)" + t}};
   int gen = *toInt(t);
   if(ts.read() != "obj")
     return {Invalid{"Misshaped named object header (obj)"}};
@@ -619,7 +635,7 @@ TopLevelObject readNamedObject(TokenStream& ts) {
   if(!(ts >> contents))
     return {Invalid{"Unable to read contents"}};
   if(ts.read() != "endobj")
-    return {NamedObject{num, gen, std::move(contents)}, "endobj not found"};
+    return {NamedObject{num, gen, std::move(contents), "endobj not found"}};
   return {NamedObject{num, gen, std::move(contents)}};
 }
 

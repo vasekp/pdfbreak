@@ -1,7 +1,10 @@
 CXXFLAGS = -std=c++17 -g -Wall -Wextra -pedantic -fno-diagnostics-show-caret -Izstr/src/ -lz
 
-all: pdfbreak
+HEADERS = pdf.h
 
-pdfbreak: pdf.h
+pdfbreak: pdfbreak.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@
+
+all: pdfbreak
 
 .PHONY: all
