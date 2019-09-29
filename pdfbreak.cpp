@@ -21,10 +21,13 @@ int main(int argc, char* argv[]) {
 
   try {
     std::string line;
-    std::getline(infs, line);
-    if(std::strncmp(line.data(), "%PDF-1.", 6)) {
-      std::cerr << "Not a PDF 1.x file.\n";
-      return 1;
+    if(infs.get() == '%') {
+      std::getline(infs, line);
+      if(std::strncmp(line.data(), "%PDF-1.", 6))
+        std::clog << "Warning: PDF header missing\n";
+    } else {
+      std::clog << "Warning: PDF header missing\n";
+      infs.unget();
     }
 
     TokenStream ints{infs};
@@ -55,9 +58,8 @@ int main(int argc, char* argv[]) {
         std::string s;
         while(infs) {
           s = readToNL(infs);
-          if(!std::strncmp(s.data() + s.length() - 6, "endobj", 6)) {
+          if(s.substr(std::max((int)s.length() - 6, 0)) == "endobj")
             break;
-          }
         }
       }
 #else
