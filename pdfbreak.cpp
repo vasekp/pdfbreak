@@ -53,6 +53,8 @@ int main(int argc, char* argv[]) {
         std::clog << "Skipping startxref marker\n";
       } else {
         std::clog << "!!! " << std::get<Invalid>(obj.contents).get_error() << '\n';
+      }
+      if(obj.failed()) {
         std::clog << "Skipping till next endobj... ";
         while(infs) {
           std::string s = readToNL(infs);

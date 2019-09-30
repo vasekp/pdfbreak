@@ -149,14 +149,72 @@ struct Boolean {
   bool failed() const { return false; }
 };
 
-struct Numeric {
-  double val;
-  void dump(std::ostream& os, unsigned off) const {
-    char buf[100];
-    std::snprintf(buf, 100, val == (long)val ? "%.0f" : "%f", val);
-    print_offset(os, off, buf);
+class Numeric {
+  long val_s;
+  int dp;
+
+public:
+  Numeric(long val) : val_s(val), dp(0) { }
+
+  Numeric(std::string str) : val_s(0), dp(-1) /* default = fail state */ {
+    if(str.empty())
+      return;
+    auto off = str.find('.');
+    char *last;
+    int dp_;
+    if(off != std::string::npos) {
+      str.erase(off, 1);
+      dp_ = str.length() - off;
+    } else
+      dp_ = 0;
+    int res = (int)strtol(str.data(), &last, 10);
+    if(last != str.data() + str.length())
+      return;
+    else {
+      val_s = res;
+      dp = dp_;
+    }
   }
-  bool failed() const { return false; }
+
+  bool integral() const { return dp == 0; }
+  
+  bool uintegral() const { return integral() && val_s >= 0; }
+
+  bool failed() const { return dp < 0; }
+
+  bool valid() const { return !failed(); }
+
+  long val_long() const {
+    assert(integral());
+    long ret = val_s;
+    int d = dp;
+    while(d > 0) {
+      ret /= 10;
+      d -= 1;
+    }
+    return ret;
+  }
+
+  unsigned long val_ulong() const {
+    assert(uintegral());
+    unsigned long ret = val_s;
+    int d = dp;
+    while(d > 0) {
+      ret /= 10;
+      d -= 1;
+    }
+    return ret;
+  }
+
+  void dump(std::ostream& os, unsigned off) const {
+    assert(!failed());
+    char buf[20];
+    std::snprintf(buf, 20, "%0*li", dp + (val_s < 0 ? 1 : 0) + 1, val_s);
+    std::string str{buf};
+    if(dp > 0)
+      str.insert(str.length() - dp, 1, '.');
+    print_offset(os, off, str);
+  }
 };
 
 struct String {
@@ -237,8 +295,8 @@ struct Stream {
 };
 
 struct Indirect {
-  int num;
-  int gen;
+  unsigned long num;
+  unsigned long gen;
   void dump(std::ostream& os, unsigned off) const {
     print_offset(os, off, "");
     os << num << ' ' << gen << " R";
@@ -344,7 +402,7 @@ Object readStream(TokenStream& ts, Dictionary&& dict) {
   std::string contents{};
   std::string error{};
   if(std::holds_alternative<Numeric>(o.contents)) {
-    unsigned len = std::get<Numeric>(o.contents).val;
+    unsigned len = std::get<Numeric>(o.contents).val_long();
     contents.resize(len);
     is.read(contents.data(), len);
     if(ts.read() != "endstream")
@@ -378,7 +436,7 @@ Object readStream(TokenStream& ts, Dictionary&& dict) {
       error = "Reached end of file" + fPos(ts);
   }
   if(std::holds_alternative<Null>(o.contents))
-    o = {Numeric{contents.length()}};
+    o = {Numeric{(long)contents.length()}};
   return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 
@@ -544,28 +602,6 @@ Object readStringHex(TokenStream& ts) {
   return {String{std::move(ret), true, std::move(error)}};
 }
 
-std::optional<double> toFloat(const std::string& s) {
-  char *last;
-  if(s.empty())
-    return {};
-  double res = (double)strtod(s.data(), &last);
-  if(last != s.data() + s.length())
-    return {};
-  else
-    return {res};
-}
-
-std::optional<int> toInt(const std::string& s) {
-  char *last;
-  if(s.empty())
-    return {};
-  int res = (int)strtol(s.data(), &last, 10);
-  if(last != s.data() + s.length())
-    return {};
-  else
-    return {res};
-}
-
 bool operator>> (TokenStream& ts, Object& obj) {
   auto t = ts.peek();
   if(t == "")
@@ -583,19 +619,20 @@ bool operator>> (TokenStream& ts, Object& obj) {
   else if(t == "true" || t == "false") {
     obj = {Boolean{t == "true"}};
     ts.consume();
-  } else if(toFloat(t)) {
+  } else if(Numeric n1{t}; n1.valid()) {
     ts.consume();
     auto t2 = ts.read();
-    if(toInt(t) && toInt(t2)) {
+    Numeric n2{t2};
+    if(n1.uintegral() && n2.uintegral()) {
       auto t3 = ts.read();
       if(t3 == "R") {
-        obj = {Indirect{*toInt(t), *toInt(t2)}};
+        obj = {Indirect{n1.val_ulong(), n2.val_ulong()}};
         return true;
       }
       ts.unread(t3);
     }
     ts.unread(t2);
-    obj = {Numeric{*toFloat(t)}};
+    obj = {std::move(n1)};
   } else {
     ts.consume();
     obj = {Invalid{"Unexpected keyword: " + t + fPos(ts)}};
@@ -610,8 +647,8 @@ bool operator>> (TokenStream& ts, Object& obj) {
 
 
 struct NamedObject {
-  int num;
-  int gen;
+  unsigned long num;
+  unsigned long gen;
   Object contents;
   std::string error = "";
   void dump(std::ostream& os, unsigned off) const {
@@ -628,8 +665,8 @@ struct NamedObject {
 };
 
 struct XRefTableSection {
-  int start;
-  int count;
+  unsigned long start;
+  unsigned long count;
   std::string data;
 };
 
@@ -648,7 +685,7 @@ struct XRefTable {
 };
 
 struct StartXRef {
-  int val;
+  unsigned long val;
   void dump(std::ostream& os, unsigned) const {
     os << "startxref\n" << val << "\n%%EOF";
   }
@@ -672,22 +709,20 @@ struct TopLevelObject {
 };
 
 TopLevelObject readNamedObject(TokenStream& ts) {
-  std::string t = ts.read();
-  if(!toInt(t))
+  Numeric num{ts.read()};
+  if(!num.uintegral())
     return {Invalid{"Misshaped named object header (gen)" + fPos(ts)}};
-  int num = *toInt(t);
-  t = ts.read();
-  if(!toInt(t))
+  Numeric gen{ts.read()};
+  if(!gen.uintegral())
     return {Invalid{"Misshaped named object header (gen)" + fPos(ts)}};
-  int gen = *toInt(t);
   if(ts.read() != "obj")
     return {Invalid{"Misshaped named object header (obj)" + fPos(ts)}};
   Object contents;
   if(!(ts >> contents))
     return {Invalid{"Unable to read contents" + fPos(ts)}};
   if(ts.read() != "endobj")
-    return {NamedObject{num, gen, std::move(contents), "endobj not found" + fPos(ts)}};
-  return {NamedObject{num, gen, std::move(contents)}};
+    return {NamedObject{num.val_ulong(), gen.val_ulong(), std::move(contents), "endobj not found" + fPos(ts)}};
+  return {NamedObject{num.val_ulong(), gen.val_ulong(), std::move(contents)}};
 }
 
 TopLevelObject readXRefTable(TokenStream& ts) {
@@ -697,21 +732,19 @@ TopLevelObject readXRefTable(TokenStream& ts) {
   skipToNL(is);
   std::vector<XRefTableSection> sections{};
   while(is) {
-    int start, count;
     s = ts.read();
     if(s == "trailer")
       break;
-    if(!toInt(s))
+    Numeric start{s};
+    if(!start.uintegral())
       return {Invalid{"Broken xref subsection header (start)" + fPos(ts)}};
-    start = *toInt(s);
-    s = ts.read();
-    if(!toInt(s))
+    Numeric count{ts.read()};
+    if(!count.uintegral())
       return {Invalid{"Broken xref subsection header (count)" + fPos(ts)}};
-    count = *toInt(s);
     skipToNL(is);
-    s.resize(20*count);
-    is.read(s.data(), 20*count);
-    sections.push_back({start, count, std::move(s)});
+    s.resize(20*count.val_ulong());
+    is.read(s.data(), 20*count.val_ulong());
+    sections.push_back({start.val_ulong(), count.val_ulong(), std::move(s)});
   }
   Object trailer;
   ts >> trailer;
@@ -721,17 +754,17 @@ TopLevelObject readXRefTable(TokenStream& ts) {
 TopLevelObject readStartXRef(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "startxref");
-  s = ts.read();
-  if(!toInt(s))
+  Numeric num{ts.read()};
+  if(!num.uintegral())
     return {Invalid{"Broken startxref" + fPos(ts)}};
-  return {StartXRef{*toInt(s)}};
+  return {StartXRef{num.val_ulong()}};
 }
 
 bool operator>> (TokenStream& ts, TopLevelObject& obj) {
   auto t = ts.peek();
   if(t == "")
     return false;
-  else if(toInt(t))
+  else if(Numeric{t}.uintegral())
     obj = readNamedObject(ts);
   else if(t == "xref")
     obj = readXRefTable(ts);
