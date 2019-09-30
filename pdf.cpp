@@ -1,6 +1,5 @@
 #include <cstdlib>
 #include <optional>
-#include <cassert>
 #include <cstring>
 #include <cstdio>
 #include <type_traits>
@@ -46,8 +45,9 @@ std::string readToNL(std::istream& is) {
   return s;
 }
 
-std::string fPos(const TokenStream& ts) {
+std::string fPos(TokenStream& ts) {
   // Does not give nonsense on errors (like tellg goes)
+  ts.reset();
   std::size_t pos = ts.istream().rdbuf()
       ->pubseekoff(0, std::ios_base::cur, std::ios_base::in);
   char buf[100];
@@ -77,8 +77,9 @@ std::string TokenStream::underflow() {
           is.get();
           return {c, c};
         }
-      } else
-        return {c};
+      }
+      // All other cases
+      return {c};
     case CharType::regular:
       {
         std::string s{c};
@@ -238,6 +239,8 @@ void Indirect::dump(std::ostream& os, unsigned off) const {
   os << num << ' ' << gen << " R";
 }
 
+/***** Implementation of PDF top level object classes *****/
+
 void NamedObject::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, "");
   os << num << ' ' << gen << " obj\n";
@@ -272,6 +275,20 @@ Object parseName(TokenStream& ts) {
     return {Name{std::move(s)}};
   else
     return {Invalid{"/ not followed by a proper name" + fPos(ts)}};
+}
+
+Object parseNumberIndir(TokenStream& ts, Numeric&& n1) {
+  std::string t2 = ts.read();
+  Numeric n2{t2};
+  if(n1.uintegral() && n2.uintegral()) {
+    auto t3 = ts.read();
+    if(t3 == "R")
+      return {Indirect{n1.val_ulong(), n2.val_ulong()}};
+    else
+      ts.unread(t3);
+  }
+  ts.unread(t2);
+  return {std::move(n1)};
 }
 
 Object parseStringLiteral(TokenStream& ts) {
@@ -399,12 +416,13 @@ Object parseArray(TokenStream& ts) {
   std::vector<Object> array{};
   std::string error{};
   while(ts.peek() != "]") {
-    Object o;
-    if(!(ts >> o)) {
-      error = "Unable to read object" + fPos(ts);
+    Object o = readObject(ts);
+    bool failed = o.failed();
+    array.push_back(std::move(o));
+    if(failed) {
+      error = "Error reading array element" + fPos(ts);
       break;
     }
-    array.push_back(std::move(o));
   }
   ts.consume();
   return {Array{std::move(array), std::move(error)}};
@@ -418,17 +436,23 @@ Object parseDict(TokenStream& ts) {
   std::map<std::string, Object> tmp{};
   std::string error{};
   while(ts.peek() != ">>") {
-    Object o1, o2;
-    if(!(ts >> o1) || !(ts >> o2)) {
-      error = "Unable to read object" + fPos(ts);
+    Object oKey = readObject(ts);
+    if(oKey.failed()) {
+      error = "Error reading key" + fPos(ts);
       break;
     }
-    if(!std::holds_alternative<Name>(o1.contents)) {
+    if(!std::holds_alternative<Name>(oKey.contents)) {
       error = "Key not a name" + fPos(ts);
       break;
     }
-    std::string name = std::get<Name>(o1.contents).val;
-    tmp[name] = std::move(o2);
+    std::string name = std::get<Name>(oKey.contents).val;
+    Object oVal = readObject(ts);
+    bool failed = oVal.failed();
+    tmp[name] = std::move(oVal);
+    if(failed) {
+      error = "Error reading value" + fPos(ts);
+      break;
+    }
   }
   ts.consume();
   Dictionary dict{std::move(tmp), std::move(error)};
@@ -439,10 +463,10 @@ Object parseDict(TokenStream& ts) {
 }
 
 Object parseStream(TokenStream& ts, Dictionary&& dict) {
-  std::istream& is = ts.istream();
   std::string s = ts.read();
   assert(s == "stream");
   assert(ts.empty());
+  std::istream& is = ts.istream();
   skipToNL(is);
   Object& o = dict.val["Length"];
   std::string contents{};
@@ -463,13 +487,13 @@ Object parseStream(TokenStream& ts, Dictionary&& dict) {
         contents.append(s.data(), off);
         auto pos = (std::size_t)is.tellg() - s.length() + off;
         is.seekg(pos);
-        ts.clear();
+        ts.reset();
         if(ts.read() == sep)
           break;
         else {
           contents.append(sep);
           is.seekg(pos + sizeof(sep) - 1);
-          ts.clear();
+          ts.reset();
         }
       } else
         contents.append(s);
@@ -486,44 +510,6 @@ Object parseStream(TokenStream& ts, Dictionary&& dict) {
   return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 
-bool operator>> (TokenStream& ts, Object& obj) {
-  auto t = ts.peek();
-  if(t == "")
-    return false;
-  else if(t == "/")
-    obj = parseName(ts);
-  else if(t == "(")
-    obj = parseStringLiteral(ts);
-  else if(t == "<")
-    obj = parseStringHex(ts);
-  else if(t == "<<")
-    obj = parseDict(ts);
-  else if(t == "[")
-    obj = parseArray(ts);
-  else if(t == "true" || t == "false") {
-    obj = {Boolean{t == "true"}};
-    ts.consume();
-  } else if(Numeric n1{t}; n1.valid()) {
-    ts.consume();
-    auto t2 = ts.read();
-    Numeric n2{t2};
-    if(n1.uintegral() && n2.uintegral()) {
-      auto t3 = ts.read();
-      if(t3 == "R") {
-        obj = {Indirect{n1.val_ulong(), n2.val_ulong()}};
-        return true;
-      }
-      ts.unread(t3);
-    }
-    ts.unread(t2);
-    obj = {std::move(n1)};
-  } else {
-    ts.consume();
-    obj = {Invalid{"Unexpected keyword: " + t + fPos(ts)}};
-  }
-  return true;
-}
-
 TopLevelObject parseNamedObject(TokenStream& ts) {
   Numeric num{ts.read()};
   if(!num.uintegral())
@@ -533,9 +519,7 @@ TopLevelObject parseNamedObject(TokenStream& ts) {
     return {Invalid{"Misshaped named object header (gen)" + fPos(ts)}};
   if(ts.read() != "obj")
     return {Invalid{"Misshaped named object header (obj)" + fPos(ts)}};
-  Object contents;
-  if(!(ts >> contents))
-    return {Invalid{"Unable to read contents" + fPos(ts)}};
+  Object contents = readObject(ts);
   if(ts.read() != "endobj")
     return {NamedObject{num.val_ulong(), gen.val_ulong(), std::move(contents), "endobj not found" + fPos(ts)}};
   return {NamedObject{num.val_ulong(), gen.val_ulong(), std::move(contents)}};
@@ -544,6 +528,7 @@ TopLevelObject parseNamedObject(TokenStream& ts) {
 TopLevelObject parseXRefTable(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "xref");
+  assert(ts.empty());
   std::istream& is = ts.istream();
   skipToNL(is);
   std::vector<XRefTable::Section> sections{};
@@ -562,9 +547,9 @@ TopLevelObject parseXRefTable(TokenStream& ts) {
     is.read(s.data(), 20*count.val_ulong());
     sections.push_back({start.val_ulong(), count.val_ulong(), std::move(s)});
   }
-  Object trailer;
-  ts >> trailer;
-  return {XRefTable{std::move(sections), trailer}};
+  Object trailer = readObject(ts);
+  //ts >> trailer;
+  return {XRefTable{std::move(sections), std::move(trailer)}};
 }
 
 TopLevelObject parseStartXRef(TokenStream& ts) {
@@ -576,31 +561,70 @@ TopLevelObject parseStartXRef(TokenStream& ts) {
   return {StartXRef{num.val_ulong()}};
 }
 
-bool operator>> (TokenStream& ts, TopLevelObject& obj) {
-  auto t = ts.peek();
+
+Object readObject(TokenStream& ts) {
+  std::string t = ts.peek();
   if(t == "")
-    return false;
+    return {Invalid{"End of input"}};
+  else if(t == "/")
+    return parseName(ts);
+  else if(t == "(")
+    return parseStringLiteral(ts);
+  else if(t == "<")
+    return parseStringHex(ts);
+  else if(t == "<<")
+    return parseDict(ts);
+  else if(t == "[")
+    return parseArray(ts);
+  else if(t == "true" || t == "false") {
+    ts.consume();
+    return {Boolean{t == "true"}};
+  } else if(Numeric n1{t}; n1.valid()) {
+    ts.consume();
+    return parseNumberIndir(ts, std::move(n1));
+  } else {
+    ts.consume();
+    return {Invalid{"Unexpected keyword: " + t + fPos(ts)}};
+  }
+}
+
+TopLevelObject readTopLevelObject(TokenStream& ts) {
+  std::string t = ts.peek();
+  if(t == "")
+    return {Invalid{}};
   else if(Numeric{t}.uintegral())
-    obj = parseNamedObject(ts);
+    return parseNamedObject(ts);
   else if(t == "xref")
-    obj = parseXRefTable(ts);
+    return parseXRefTable(ts);
   else if(t == "startxref")
-    obj = parseStartXRef(ts);
+    return parseStartXRef(ts);
   else {
     ts.consume();
-    obj = {Invalid{"Unexpected token: " + t + fPos(ts)}};
+    return {Invalid{"Unexpected token: " + t + fPos(ts)}};
   }
-  return true;
 }
 
-std::ostream& operator<< (std::ostream& os, const Object& obj) {
-  obj.dump(os, 0);
-  return os;
-}
 
-std::ostream& operator<< (std::ostream& os, const TopLevelObject& obj) {
-  obj.dump(os, 0);
-  return os;
+std::istream::pos_type skipBrokenObject(TokenStream& ts) {
+  ts.reset();
+  std::istream& is = ts.istream();
+  while(is) {
+    std::string s = pdf::readToNL(is);
+    /* We can't rely on this being the only thing on a line, especially
+       if the file is possibly broken anyway. */
+    const std::string sep = "endobj";
+    if(auto off = s.find(sep); off != std::string::npos) {
+      if(off + sep.length() == s.length()) // separator at end of line: OK
+        return is.tellg();
+      auto pos = (std::size_t)is.tellg() - s.length() + off + sep.length();
+      is.seekg(pos);
+      ts.reset();
+      if(char after = is.peek(); charType(after) != CharType::regular)
+        return is.tellg();
+    }
+  }
+  // End of file
+  return std::istream::pos_type(-1);
 }
 
 } //namespace pdf

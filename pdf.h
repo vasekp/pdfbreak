@@ -8,6 +8,7 @@
 #include <vector>
 #include <map>
 #include <variant>
+#include <cassert>
 
 namespace pdf {
 
@@ -49,13 +50,14 @@ class TokenStream {
     return !stack.empty() || is.good();
   }
 
-  void clear() {
-    is.clear();
-    stack = {};
+  std::istream& istream() const {
+    assert(empty());
+    return is;
   }
 
-  std::istream& istream() const {
-    return is;
+  void reset() {
+    stack = {};
+    is.clear();
   }
 
   private:
@@ -214,12 +216,19 @@ struct TopLevelObject {
   }
 };
 
+Object readObject(TokenStream&);
+TopLevelObject readTopLevelObject(TokenStream&);
+std::istream::pos_type skipBrokenObject(TokenStream&);
 
-bool operator>> (TokenStream& ts, Object&);
-bool operator>> (TokenStream& ts, TopLevelObject& obj);
-std::string readToNL(std::istream& is);
-std::ostream& operator<< (std::ostream& os, const Object& obj);
-std::ostream& operator<< (std::ostream& os, const TopLevelObject& obj);
+inline std::ostream& operator<< (std::ostream& os, const Object& obj) {
+  obj.dump(os, 0);
+  return os;
+}
+
+inline std::ostream& operator<< (std::ostream& os, const TopLevelObject& obj) {
+  obj.dump(os, 0);
+  return os;
+}
 
 } // namespace pdf
 

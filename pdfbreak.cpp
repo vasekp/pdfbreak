@@ -30,9 +30,9 @@ int main(int argc, char* argv[]) {
     }
 
     pdf::TokenStream ints{infs};
-    pdf::TopLevelObject obj;
     unsigned trailercnt = 0;
-    while(ints && ints >> obj) {
+    while(ints) {
+      pdf::TopLevelObject obj = readTopLevelObject(ints);
       if(std::holds_alternative<pdf::NamedObject>(obj.contents)) {
         const pdf::NamedObject& nmo = std::get<pdf::NamedObject>(obj.contents);
         std::ostringstream oss{};
@@ -51,30 +51,19 @@ int main(int argc, char* argv[]) {
         std::clog << "Saving: " << oss.str() << '\n';
       } else if(std::holds_alternative<pdf::StartXRef>(obj.contents)) {
         std::clog << "Skipping startxref marker\n";
-      } else {
-        std::clog << "!!! " << std::get<pdf::Invalid>(obj.contents).get_error() << '\n';
+      } else if(std::holds_alternative<pdf::Invalid>(obj.contents)) {
+        std::string error = std::get<pdf::Invalid>(obj.contents).get_error();
+        if(error.empty()) // end of input
+          break;
+        std::clog << "!!! " << error << '\n';
       }
       if(obj.failed()) {
         std::clog << "Skipping till next endobj... ";
-        while(infs) {
-          std::string s = pdf::readToNL(infs);
-          /* We can't rely on this being the only thing on a line, especially
-             if the file is possibly broken anyway. */
-          char sep[] = "endobj";
-          if(auto off = s.find(sep); off != std::string::npos) {
-            auto pos = (std::size_t)infs.tellg() - s.length() + off;
-            infs.seekg(pos);
-            ints.clear();
-            if(ints.read() == sep) {
-              std::clog << pos;
-              break;
-            } else {
-              infs.seekg(pos + sizeof(sep) - 1);
-              ints.clear();
-            }
-          }
-        }
-        std::clog << '\n';
+        auto offset = pdf::skipBrokenObject(ints);
+        if(ints)
+          std::clog << offset << '\n';
+        else
+          std::clog << "(end of file)\n";
       }
     }
   } catch(const std::ios_base::failure& err) {
