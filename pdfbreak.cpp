@@ -29,35 +29,35 @@ int main(int argc, char* argv[]) {
       std::clog << "Warning: PDF header missing\n";
     }
 
-    TokenStream ints{infs};
-    TopLevelObject obj;
+    pdf::TokenStream ints{infs};
+    pdf::TopLevelObject obj;
     unsigned trailercnt = 0;
     while(ints && ints >> obj) {
-      if(std::holds_alternative<NamedObject>(obj.contents)) {
-        const NamedObject& nmo = std::get<NamedObject>(obj.contents);
+      if(std::holds_alternative<pdf::NamedObject>(obj.contents)) {
+        const pdf::NamedObject& nmo = std::get<pdf::NamedObject>(obj.contents);
         std::ostringstream oss{};
         oss << argv[1] << '-' << nmo.num << '.' << nmo.gen << ".obj";
         std::ofstream ofs{oss.str()};
         ofs << obj << '\n';
         std::clog << "Saving: " << oss.str()
           << (obj.failed() ? " (errors)\n" : "\n");
-      } else if(std::holds_alternative<XRefTable>(obj.contents)) {
-        const Object& trailer = std::get<XRefTable>(obj.contents).trailer;
+      } else if(std::holds_alternative<pdf::XRefTable>(obj.contents)) {
+        const pdf::Object& trailer = std::get<pdf::XRefTable>(obj.contents).trailer;
         std::clog << "Skipping xref table\n";
         std::ostringstream oss{};
         oss << argv[1] << "-trailer" << ++trailercnt << ".obj";
         std::ofstream ofs{oss.str()};
         ofs << "trailer\n" << trailer << '\n';
         std::clog << "Saving: " << oss.str() << '\n';
-      } else if(std::holds_alternative<StartXRef>(obj.contents)) {
+      } else if(std::holds_alternative<pdf::StartXRef>(obj.contents)) {
         std::clog << "Skipping startxref marker\n";
       } else {
-        std::clog << "!!! " << std::get<Invalid>(obj.contents).get_error() << '\n';
+        std::clog << "!!! " << std::get<pdf::Invalid>(obj.contents).get_error() << '\n';
       }
       if(obj.failed()) {
         std::clog << "Skipping till next endobj... ";
         while(infs) {
-          std::string s = readToNL(infs);
+          std::string s = pdf::readToNL(infs);
           /* We can't rely on this being the only thing on a line, especially
              if the file is possibly broken anyway. */
           char sep[] = "endobj";
