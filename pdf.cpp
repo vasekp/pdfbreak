@@ -46,8 +46,7 @@ std::string readToNL(std::istream& is) {
 }
 
 std::string fPos(TokenStream& ts) {
-  // Does not give nonsense on errors (like tellg goes)
-  ts.reset();
+  // This construction does not give nonsense on errors (like tellg goes)
   std::size_t pos = ts.istream().rdbuf()
       ->pubseekoff(0, std::ios_base::cur, std::ios_base::in);
   char buf[100];
@@ -446,7 +445,11 @@ Object parseDict(TokenStream& ts) {
       break;
     }
     std::string name = std::get<Name>(oKey.contents).val;
-    Object oVal = readObject(ts);
+    Object oVal;
+    if(ts.peek() == ">>")
+      oVal = {Invalid{"Value not present" + fPos(ts)}};
+    else
+      oVal = readObject(ts);
     bool failed = oVal.failed();
     tmp[name] = std::move(oVal);
     if(failed) {

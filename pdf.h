@@ -51,7 +51,6 @@ class TokenStream {
   }
 
   std::istream& istream() const {
-    assert(empty());
     return is;
   }
 
