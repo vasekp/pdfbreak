@@ -73,11 +73,16 @@ class TokenStream {
     return is.good();
   }
 
+  void clear() {
+    is.clear();
+    stack = {};
+  }
+
   std::istream& istream() {
     return is;
   }
 
-  auto tellg() const {
+  std::istream::pos_type tellg() const {
     return is.rdbuf()->pubseekoff(0, std::ios_base::cur, std::ios_base::in);
   }
 
@@ -114,7 +119,7 @@ class TokenStream {
 
 std::string fPos(const TokenStream& ts) {
   char buf[100];
-  std::snprintf(buf, 100, " (near %lu)", (unsigned long)ts.tellg());
+  std::snprintf(buf, 100, " (near %zu)", (std::size_t)ts.tellg());
   return {buf};
 }
 
@@ -307,11 +312,11 @@ void skipToNL(std::istream& is) {
 std::string readToNL(std::istream& is) {
   std::string s{};
   char c;
-  while(is.get(c))
+  while(is.get(c)) {
+    s.push_back(c);
     if(c == '\n' || c == '\r')
       break;
-    else
-      s.push_back(c);
+  }
   return s;
 }
 
@@ -338,20 +343,33 @@ Object readStream(TokenStream& ts, Dictionary&& dict) {
     unsigned len = std::get<Numeric>(o.contents).val;
     contents.resize(len);
     is.read(contents.data(), len);
-    skipToNL(is);
     if(ts.read() != "endstream")
       error = "endstream not found where expected" + fPos(ts);
   } else {
     while(is) {
       s = readToNL(is);
-      if(s.substr(std::max((int)s.length() - 9, 0)) == "endstream") {
-        contents.append(s.data(), s.length() - 9);
-        break;
-      } else {
+      /* We can't rely on this being the only thing on a line, especially
+         if the file is possibly broken anyway. */
+      char sep[] = "endstream";
+      if(auto off = s.find(sep); off != std::string::npos) {
+        contents.append(s.data(), off);
+        auto pos = (std::size_t)is.tellg() - s.length() + off;
+        is.seekg(pos);
+        ts.clear();
+        if(ts.read() == sep)
+          break;
+        else {
+          contents.append(sep);
+          is.seekg(pos + sizeof(sep) - 1);
+          ts.clear();
+        }
+      } else
         contents.append(s);
-        contents.push_back('\n');
-      }
     }
+    /* TODO: PDF spec says newline before endstream should be ignored
+       (but real world examples show it may be omitted). Do we care?
+       + our output routine inserts more whitespace before endstream,
+       may need fixing if so. */
     if(!is)
       error = "Reached end of file" + fPos(ts);
   }
@@ -605,11 +623,10 @@ struct NamedObject {
     os << num << ' ' << gen << " obj\n";
     contents.dump(os, off+1);
     os << '\n';
-    print_offset(os, off, "endobj");
     if(!error.empty()) {
-      os << '\n';
-      print_offset(os, off, "% !!! " + error);
+      print_offset(os, off, "% !!! " + error + "\n");
     }
+    print_offset(os, off, "endobj");
   }
   bool failed() const { return !error.empty(); }
 };

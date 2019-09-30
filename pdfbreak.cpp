@@ -21,13 +21,12 @@ int main(int argc, char* argv[]) {
 
   try {
     std::string line;
-    if(infs.get() == '%') {
+    if(infs.peek() == '%') {
       std::getline(infs, line);
       if(std::strncmp(line.data(), "%PDF-1.", 6))
         std::clog << "Warning: PDF header missing\n";
     } else {
       std::clog << "Warning: PDF header missing\n";
-      infs.unget();
     }
 
     TokenStream ints{infs};
@@ -55,11 +54,26 @@ int main(int argc, char* argv[]) {
         std::clog << "Skipping startxref marker\n";
       } else {
         std::clog << "!!! " << std::get<Invalid>(obj.contents).get_error() << '\n';
+        std::clog << "Skipping till next endobj... ";
         while(infs) {
           std::string s = readToNL(infs);
-          if(s.substr(std::max((int)s.length() - 6, 0)) == "endobj")
-            break;
+          /* We can't rely on this being the only thing on a line, especially
+             if the file is possibly broken anyway. */
+          char sep[] = "endobj";
+          if(auto off = s.find(sep); off != std::string::npos) {
+            auto pos = (std::size_t)infs.tellg() - s.length() + off;
+            infs.seekg(pos);
+            ints.clear();
+            if(ints.read() == sep) {
+              std::clog << pos;
+              break;
+            } else {
+              infs.seekg(pos + sizeof(sep) - 1);
+              ints.clear();
+            }
+          }
         }
+        std::clog << '\n';
       }
 #else
       std::cout << obj << '\n';
