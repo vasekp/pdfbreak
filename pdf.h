@@ -35,6 +35,8 @@ CharType charType(char c) {
 }
 
 
+void skipToNL(std::istream& is);
+
 class TokenStream {
   std::istream& is;
   std::stack<std::string> stack;
@@ -94,14 +96,16 @@ class TokenStream {
       return "";
     switch(charType(c)) {
       case CharType::delim:
-        if(c == '<' || c == '>') {
+        if(c == '%') {
+          skipToNL(is);
+          return underflow();
+        } else if(c == '<' || c == '>') {
           if(is.peek() == c) {
             is.get();
             return {c, c};
           }
-        }
-        // All other cases
-        return {c};
+        } else
+          return {c};
       case CharType::regular:
         {
           std::string s{c};
@@ -540,13 +544,6 @@ Object readStringHex(TokenStream& ts) {
   return {String{std::move(ret), true, std::move(error)}};
 }
 
-void skipComment(TokenStream& ts) {
-  std::string s = ts.read();
-  assert(s == "%");
-  assert(ts.empty());
-  skipToNL(ts.istream());
-}
-
 std::optional<double> toFloat(const std::string& s) {
   char *last;
   if(s.empty())
@@ -583,10 +580,7 @@ bool operator>> (TokenStream& ts, Object& obj) {
     obj = readDict(ts);
   else if(t == "[")
     obj = readArray(ts);
-  else if(t == "%") {
-    skipComment(ts);
-    return ts >> obj;
-  } else if(t == "true" || t == "false") {
+  else if(t == "true" || t == "false") {
     obj = {Boolean{t == "true"}};
     ts.consume();
   } else if(toFloat(t)) {
@@ -737,10 +731,7 @@ bool operator>> (TokenStream& ts, TopLevelObject& obj) {
   auto t = ts.peek();
   if(t == "")
     return false;
-  else if(t == "%") {
-    skipComment(ts);
-    return ts >> obj;
-  } else if(toInt(t))
+  else if(toInt(t))
     obj = readNamedObject(ts);
   else if(t == "xref")
     obj = readXRefTable(ts);
