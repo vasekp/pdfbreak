@@ -57,14 +57,6 @@ int main(int argc, char* argv[]) {
           break;
         std::clog << "!!! " << error << '\n';
       }
-      if(obj.failed()) {
-        std::clog << "Skipping till next endobj... ";
-        auto offset = pdf::skipBrokenObject(ints);
-        if(ints)
-          std::clog << offset << '\n';
-        else
-          std::clog << "(end of file)\n";
-      }
     }
   } catch(const std::ios_base::failure& err) {
     std::cerr << err.what() << '\n';

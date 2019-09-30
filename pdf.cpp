@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cstdio>
 #include <type_traits>
+#include <stdexcept>
 
 #include "pdf.h"
 
@@ -45,13 +46,14 @@ std::string readToNL(std::istream& is) {
   return s;
 }
 
-std::string fPos(TokenStream& ts) {
-  // This construction does not give nonsense on errors (like tellg goes)
-  std::size_t pos = ts.istream().rdbuf()
-      ->pubseekoff(0, std::ios_base::cur, std::ios_base::in);
-  char buf[100];
-  std::snprintf(buf, 100, " (near %zu)", pos);
-  return {buf};
+std::string fPos(const TokenStream& ts, bool exact = false) {
+  auto pos = ts.istream().tellg();
+  if(pos != std::istream::pos_type(-1)) {
+    char buf[100];
+    std::snprintf(buf, 100, exact ? " at %zu" : " (near %zu)", (std::size_t)pos);
+    return {buf};
+  } else
+    return " at end of input";
 }
 
 void print_offset(std::ostream& os, unsigned off, const std::string& text) {
@@ -62,9 +64,13 @@ void print_offset(std::ostream& os, unsigned off, const std::string& text) {
 /***** Implementation of TokenStream *****/
 
 std::string TokenStream::underflow() {
-  is >> std::ws;
-  char c = is.get();
-  if(!is)
+  char c;
+  while(is.get(c))
+    if(charType(c) != CharType::ws) {
+      is.unget();
+      break;
+    }
+  if(!is.get(c))
     return "";
   switch(charType(c)) {
     case CharType::delim:
@@ -82,14 +88,15 @@ std::string TokenStream::underflow() {
     case CharType::regular:
       {
         std::string s{c};
-        while(charType(c = is.get()) == CharType::regular)
+        while(is.get(c) && charType(c) == CharType::regular)
           s.push_back(c);
-        is.unget();
+        if(is)
+          is.unget();
         return s;
       }
     case CharType::ws:
     default:
-      return "";
+      throw std::logic_error("Unexpected charType");
   }
 }
 
@@ -98,6 +105,12 @@ std::string TokenStream::underflow() {
 
 void Null::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, "null");
+}
+
+Invalid::Invalid(const TokenStream& ts, std::string&& error_)
+  : error(std::move(error_))
+{
+  error.append(fPos(ts));
 }
 
 void Invalid::dump(std::ostream& os, unsigned off) const {
@@ -273,7 +286,7 @@ Object parseName(TokenStream& ts) {
   if(charType(s[0]) == CharType::regular)
     return {Name{std::move(s)}};
   else
-    return {Invalid{"/ not followed by a proper name" + fPos(ts)}};
+    return {Invalid{ts, "/ not followed by a proper name"}};
 }
 
 Object parseNumberIndir(TokenStream& ts, Numeric&& n1) {
@@ -301,7 +314,7 @@ Object parseStringLiteral(TokenStream& ts) {
   while(true) {
     char c;
     if(!is.get(c)) {
-      error = "EOF while reading string" + fPos(ts);
+      error = "End of input while reading string";
       break;
     }
     if(c == ')') {
@@ -315,7 +328,7 @@ Object parseStringLiteral(TokenStream& ts) {
       parens++;
     } else if(c == '\\') {
       if(!is.get(c)) {
-        error = "EOF while reading string" + fPos(ts);
+        error = "End of input while reading string";
         break;
       }
       switch(c) {
@@ -360,7 +373,7 @@ Object parseStringLiteral(TokenStream& ts) {
           }
           break;
         default:
-          error = "Invalid characters in string" + fPos(ts);
+          error = "Invalid character in string" + fPos(ts);
           goto end;
       }
     } else
@@ -402,7 +415,7 @@ Object parseStringHex(TokenStream& ts) {
     } else if(c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f')
       /* ignore */;
     else {
-      error = "Invalid character in hex string" + fPos(ts);
+      error = "Invalid character in string" + fPos(ts);
       break;
     }
   }
@@ -419,7 +432,7 @@ Object parseArray(TokenStream& ts) {
     bool failed = o.failed();
     array.push_back(std::move(o));
     if(failed) {
-      error = "Error reading array element" + fPos(ts);
+      error = "Error reading array element";
       break;
     }
   }
@@ -437,23 +450,23 @@ Object parseDict(TokenStream& ts) {
   while(ts.peek() != ">>") {
     Object oKey = readObject(ts);
     if(oKey.failed()) {
-      error = "Error reading key" + fPos(ts);
+      error = "Error reading key";
       break;
     }
     if(!std::holds_alternative<Name>(oKey.contents)) {
-      error = "Key not a name" + fPos(ts);
+      error = "Key not a name";
       break;
     }
     std::string name = std::get<Name>(oKey.contents).val;
     Object oVal;
     if(ts.peek() == ">>")
-      oVal = {Invalid{"Value not present" + fPos(ts)}};
+      oVal = {Invalid{ts, "Value not present"}};
     else
       oVal = readObject(ts);
     bool failed = oVal.failed();
     tmp[name] = std::move(oVal);
     if(failed) {
-      error = "Error reading value" + fPos(ts);
+      error = "Error reading value";
       break;
     }
   }
@@ -479,7 +492,7 @@ Object parseStream(TokenStream& ts, Dictionary&& dict) {
     contents.resize(len);
     is.read(contents.data(), len);
     if(ts.read() != "endstream")
-      error = "endstream not found where expected" + fPos(ts);
+      error = "endstream not found" + fPos(ts);
   } else {
     while(is) {
       s = readToNL(is);
@@ -506,26 +519,57 @@ Object parseStream(TokenStream& ts, Dictionary&& dict) {
        + our output routine inserts more whitespace before endstream,
        may need fixing if so. */
     if(!is)
-      error = "Reached end of file" + fPos(ts);
+      error = "endstream not found" + fPos(ts);
   }
   if(std::holds_alternative<Null>(o.contents))
     o = {Numeric{(long)contents.length()}};
   return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 
+/***** Top level object parsing *****/
+
+bool skipBrokenObject(TokenStream& ts) {
+  ts.reset();
+  std::istream& is = ts.istream();
+  while(is) {
+    std::string s = pdf::readToNL(is);
+    const std::string sep = "endobj";
+    if(auto off = s.find(sep); off != std::string::npos) {
+      if(off + sep.length() == s.length()) // separator at end of line: OK
+        return true;
+      auto pos = (std::size_t)is.tellg() - s.length() + off + sep.length();
+      is.seekg(pos);
+      ts.reset();
+      if(char after = is.peek(); charType(after) != CharType::regular)
+        return true;
+    }
+  }
+  return false;
+}
+
 TopLevelObject parseNamedObject(TokenStream& ts) {
   Numeric num{ts.read()};
   if(!num.uintegral())
-    return {Invalid{"Misshaped named object header (gen)" + fPos(ts)}};
+    return {Invalid{ts, "Misshaped named object header (gen)"}};
   Numeric gen{ts.read()};
   if(!gen.uintegral())
-    return {Invalid{"Misshaped named object header (gen)" + fPos(ts)}};
+    return {Invalid{ts, "Misshaped named object header (gen)"}};
   if(ts.read() != "obj")
-    return {Invalid{"Misshaped named object header (obj)" + fPos(ts)}};
+    return {Invalid{ts, "Misshaped named object header (obj)"}};
   Object contents = readObject(ts);
-  if(ts.read() != "endobj")
-    return {NamedObject{num.val_ulong(), gen.val_ulong(), std::move(contents), "endobj not found" + fPos(ts)}};
-  return {NamedObject{num.val_ulong(), gen.val_ulong(), std::move(contents)}};
+  std::string error{};
+  if(ts.read() != "endobj") {
+    error = "endobj not found" + fPos(ts);
+    if(ts) {
+      bool success = skipBrokenObject(ts);
+      if(success)
+        error.append(", continuing" + fPos(ts, true));
+      else
+        error.append(", not found until end of input");
+    }
+  }
+  return {NamedObject{num.val_ulong(), gen.val_ulong(), std::move(contents),
+    std::move(error)}};
 }
 
 TopLevelObject parseXRefTable(TokenStream& ts) {
@@ -541,10 +585,10 @@ TopLevelObject parseXRefTable(TokenStream& ts) {
       break;
     Numeric start{s};
     if(!start.uintegral())
-      return {Invalid{"Broken xref subsection header (start)" + fPos(ts)}};
+      return {Invalid{ts, "Broken xref subsection header (start)"}};
     Numeric count{ts.read()};
     if(!count.uintegral())
-      return {Invalid{"Broken xref subsection header (count)" + fPos(ts)}};
+      return {Invalid{ts, "Broken xref subsection header (count)"}};
     skipToNL(is);
     s.resize(20*count.val_ulong());
     is.read(s.data(), 20*count.val_ulong());
@@ -560,7 +604,7 @@ TopLevelObject parseStartXRef(TokenStream& ts) {
   assert(s == "startxref");
   Numeric num{ts.read()};
   if(!num.uintegral())
-    return {Invalid{"Broken startxref" + fPos(ts)}};
+    return {Invalid{ts, "Broken startxref"}};
   return {StartXRef{num.val_ulong()}};
 }
 
@@ -587,13 +631,13 @@ Object readObject(TokenStream& ts) {
     return parseNumberIndir(ts, std::move(n1));
   } else {
     ts.consume();
-    return {Invalid{"Unexpected keyword: " + t + fPos(ts)}};
+    return {Invalid{ts, "Garbage or unexpected token"}};
   }
 }
 
 TopLevelObject readTopLevelObject(TokenStream& ts) {
   std::string t = ts.peek();
-  if(t == "")
+  if(t == "") // EOF
     return {Invalid{}};
   else if(Numeric{t}.uintegral())
     return parseNamedObject(ts);
@@ -602,32 +646,16 @@ TopLevelObject readTopLevelObject(TokenStream& ts) {
   else if(t == "startxref")
     return parseStartXRef(ts);
   else {
-    ts.consume();
-    return {Invalid{"Unexpected token: " + t + fPos(ts)}};
-  }
-}
-
-
-std::istream::pos_type skipBrokenObject(TokenStream& ts) {
-  ts.reset();
-  std::istream& is = ts.istream();
-  while(is) {
-    std::string s = pdf::readToNL(is);
-    /* We can't rely on this being the only thing on a line, especially
-       if the file is possibly broken anyway. */
-    const std::string sep = "endobj";
-    if(auto off = s.find(sep); off != std::string::npos) {
-      if(off + sep.length() == s.length()) // separator at end of line: OK
-        return is.tellg();
-      auto pos = (std::size_t)is.tellg() - s.length() + off + sep.length();
-      is.seekg(pos);
-      ts.reset();
-      if(char after = is.peek(); charType(after) != CharType::regular)
-        return is.tellg();
+    std::string error = "Garbage or unexpected token" + fPos(ts);
+    if(ts) {
+      bool success = skipBrokenObject(ts);
+      if(success)
+        error.append(", continuing" + fPos(ts, true));
+      else
+        error.append(", no recovery until end of input");
     }
+    return {Invalid{std::move(error)}};
   }
-  // End of file
-  return std::istream::pos_type(-1);
 }
 
 } //namespace pdf

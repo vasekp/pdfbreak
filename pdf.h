@@ -141,8 +141,14 @@ struct Indirect {
   void dump(std::ostream& os, unsigned off) const;
 };
 
-struct Invalid {
+class Invalid {
   std::string error;
+
+  public:
+  Invalid() : error{} { }
+  Invalid(std::string&& error_) : error(std::move(error_)) { }
+  Invalid(const TokenStream&, std::string&&);
+
   const std::string& get_error() const { return error; }
   bool failed() const { return true; }
   void dump(std::ostream& os, unsigned off) const;
@@ -176,7 +182,7 @@ struct NamedObject {
   unsigned long gen;
   Object contents;
   std::string error = "";
-  bool failed() const { return !error.empty(); }
+  bool failed() const { return contents.failed() || !error.empty(); }
   void dump(std::ostream& os, unsigned off) const;
 };
 
@@ -217,7 +223,6 @@ struct TopLevelObject {
 
 Object readObject(TokenStream&);
 TopLevelObject readTopLevelObject(TokenStream&);
-std::istream::pos_type skipBrokenObject(TokenStream&);
 
 inline std::ostream& operator<< (std::ostream& os, const Object& obj) {
   obj.dump(os, 0);
