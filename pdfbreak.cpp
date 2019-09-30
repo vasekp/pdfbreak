@@ -33,7 +33,6 @@ int main(int argc, char* argv[]) {
     TopLevelObject obj;
     unsigned trailercnt = 0;
     while(ints && ints >> obj) {
-#if 1
       if(std::holds_alternative<NamedObject>(obj.contents)) {
         const NamedObject& nmo = std::get<NamedObject>(obj.contents);
         std::ostringstream oss{};
@@ -75,9 +74,6 @@ int main(int argc, char* argv[]) {
         }
         std::clog << '\n';
       }
-#else
-      std::cout << obj << '\n';
-#endif
     }
   } catch(const std::ios_base::failure& err) {
     std::cerr << err.what() << '\n';

@@ -336,7 +336,7 @@ Object readStream(TokenStream& ts, Dictionary&& dict) {
   assert(s == "stream");
   assert(ts.empty());
   skipToNL(is);
-  Object o = dict.val["Length"];
+  Object& o = dict.val["Length"];
   std::string contents{};
   std::string error{};
   if(std::holds_alternative<Numeric>(o.contents)) {
@@ -373,6 +373,8 @@ Object readStream(TokenStream& ts, Dictionary&& dict) {
     if(!is)
       error = "Reached end of file" + fPos(ts);
   }
+  if(std::holds_alternative<Null>(o.contents))
+    o = {Numeric{contents.length()}};
   return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 
