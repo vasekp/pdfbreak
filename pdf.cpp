@@ -28,17 +28,16 @@ CharType charType(char c) {
   }
 }
 
-void skipToNL(std::istream& is) {
-  char c;
-  while(is.get(c))
-    if(c == '\n' || c == '\r')
+void skipToNL(std::streambuf& stream) {
+  for(auto cInt = stream.sbumpc(); cInt != std::streambuf::traits_type::eof(); cInt = stream.sbumpc())
+    if(char c = std::streambuf::traits_type::to_char_type(cInt); c == '\n' || c == '\r')
       break;
 }
 
-std::string readToNL(std::istream& is) {
+std::string readToNL(std::streambuf& stream) {
   std::string s{};
-  char c;
-  while(is.get(c)) {
+  for(auto cInt = stream.sbumpc(); cInt != std::streambuf::traits_type::eof(); cInt = stream.sbumpc()) {
+    char c = std::streambuf::traits_type::to_char_type(cInt);
     s.push_back(c);
     if(c == '\n' || c == '\r')
       break;
@@ -47,13 +46,13 @@ std::string readToNL(std::istream& is) {
 }
 
 std::string fPos(const TokenStream& ts, bool exact = false) {
-  auto pos = ts.istream().tellg();
-  if(pos != std::istream::pos_type(-1)) {
-    char buf[100];
-    std::snprintf(buf, 100, exact ? " at %zu" : " (near %zu)", (std::size_t)pos);
-    return {buf};
-  } else
-    return " at end of input";
+  /*if(ts.stream().in_avail() == 0)
+    return " at end of input";*/
+  auto pos = ts.stream().pubseekoff(0, std::ios_base::cur);
+  assert(pos != std::streambuf::pos_type(-1));
+  char buf[100];
+  std::snprintf(buf, 100, exact ? " at %zu" : " (near %zu)", (std::size_t)pos);
+  return {buf};
 }
 
 void print_offset(std::ostream& os, unsigned off, const std::string& text) {
@@ -64,39 +63,42 @@ void print_offset(std::ostream& os, unsigned off, const std::string& text) {
 /***** Implementation of TokenStream *****/
 
 std::string TokenStream::underflow() {
+  std::streambuf::traits_type::int_type cInt;
   char c;
-  while(is.get(c))
-    if(charType(c) != CharType::ws) {
-      is.unget();
+  for(cInt = _stream.sgetc(); cInt != std::streambuf::traits_type::eof(); cInt = _stream.snextc())
+    if(c = std::streambuf::traits_type::to_char_type(cInt); charType(c) != CharType::ws)
       break;
-    }
-  if(!is.get(c))
+  if(cInt == std::streambuf::traits_type::eof())
     return "";
   switch(charType(c)) {
     case CharType::delim:
       if(c == '%') {
-        skipToNL(is);
+        skipToNL(_stream);
         return underflow();
       } else if(c == '<' || c == '>') {
-        if(is.peek() == c) {
-          is.get();
+        if(cInt = _stream.snextc(); std::streambuf::traits_type::to_char_type(cInt) == c) {
+          _stream.sbumpc();
           return {c, c};
         }
       }
       // All other cases
+      _stream.sbumpc();
       return {c};
     case CharType::regular:
       {
         std::string s{c};
-        while(is.get(c) && charType(c) == CharType::regular)
-          s.push_back(c);
-        if(is)
-          is.unget();
+        for(auto cInt = _stream.snextc(); cInt != std::streambuf::traits_type::eof(); cInt = _stream.snextc()) {
+          c = std::streambuf::traits_type::to_char_type(cInt);
+          if(charType(c) == CharType::regular)
+            s.push_back(c);
+          else
+            break;
+        }
         return s;
       }
     case CharType::ws:
     default:
-      throw std::logic_error("Unexpected charType");
+      throw std::logic_error("Unexpected CharType");
   }
 }
 
@@ -307,30 +309,33 @@ Object parseStringLiteral(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "(");
   assert(ts.empty());
-  std::istream& is = ts.istream();
+  std::streambuf& stream = ts.stream();
   std::string ret{};
   std::string error{};
   unsigned parens = 0;
-  while(true) {
-    char c;
-    if(!is.get(c)) {
+  
+  while(auto cInt = stream.sbumpc()) {
+    if(cInt == std::streambuf::traits_type::eof()) {
       error = "End of input while reading string";
       break;
     }
+    char c = std::streambuf::traits_type::to_char_type(cInt);
     if(c == ')') {
       if(parens > 0) {
         ret.push_back(c);
         parens--;
-      } else
+      } else // end of string literal
         break;
     } else if(c == '(') {
       ret.push_back(c);
       parens++;
     } else if(c == '\\') {
-      if(!is.get(c)) {
+      cInt = stream.sbumpc();
+      if(cInt == std::streambuf::traits_type::eof()) {
         error = "End of input while reading string";
         break;
       }
+      c = std::streambuf::traits_type::to_char_type(cInt);
       switch(c) {
         case 'n':
           ret.push_back('\n');
@@ -359,13 +364,21 @@ Object parseStringLiteral(TokenStream& ts) {
         case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
           {
             char d = c - '0';
-            c = is.peek();
+            cInt = stream.sgetc();
+            if(cInt == std::streambuf::traits_type::eof()) {
+              error = "End of input while reading string";
+              break;
+            }
+            c = std::streambuf::traits_type::to_char_type(cInt);
             if(c >= '0' && c <= '7') {
-              is.get();
               d = d*8 + (c - '0');
-              c = is.peek();
+              cInt = stream.snextc();
+              if(cInt == std::streambuf::traits_type::eof()) {
+                error = "End of input while reading string";
+                break;
+              }
               if(c >= '0' && c <= '7') {
-                is.get();
+                stream.sbumpc();
                 d = d*8 + (c - '0');
               }
             }
@@ -387,14 +400,18 @@ Object parseStringHex(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "<");
   assert(ts.empty());
-  std::istream& is = ts.istream();
+  std::streambuf& stream = ts.stream();
   std::string ret{};
   std::string error{};
   unsigned odd = 0;
   char d = 0;
-  while(is) {
-    char c;
-    is.get(c);
+
+  while(auto cInt = stream.sbumpc()) {
+    if(cInt == std::streambuf::traits_type::eof()) {
+      error = "End of input while reading string";
+      break;
+    }
+    char c = std::streambuf::traits_type::to_char_type(cInt);
     if(c == '>') {
       if(odd)
         ret.push_back(16*d);
@@ -482,35 +499,34 @@ Object parseStream(TokenStream& ts, Dictionary&& dict) {
   std::string s = ts.read();
   assert(s == "stream");
   assert(ts.empty());
-  std::istream& is = ts.istream();
-  skipToNL(is);
+  std::streambuf& stream = ts.stream();
+  skipToNL(stream);
   Object& o = dict.val["Length"];
   std::string contents{};
   std::string error{};
   if(std::holds_alternative<Numeric>(o.contents)) {
     unsigned len = std::get<Numeric>(o.contents).val_long();
     contents.resize(len);
-    is.read(contents.data(), len);
+    if(stream.sgetn(contents.data(), len) < len)
+      error = "End of input during reading stream data";
     if(ts.read() != "endstream")
       error = "endstream not found" + fPos(ts);
   } else {
-    while(is) {
-      s = readToNL(is);
+    const std::string sep = "endstream";
+    for(s = readToNL(stream); !s.empty(); s = readToNL(stream)) {
       /* We can't rely on this being the only thing on a line, especially
          if the file is possibly broken anyway. */
-      char sep[] = "endstream";
       if(auto off = s.find(sep); off != std::string::npos) {
         contents.append(s.data(), off);
-        auto pos = (std::size_t)is.tellg() - s.length() + off;
-        is.seekg(pos);
-        ts.reset();
-        if(ts.read() == sep)
+        if(off + sep.length() == s.length()) // separator at end of line: OK
           break;
-        else {
+        stream.pubseekoff(- s.length() + off + sep.length(), std::ios_base::cur);
+        ts.reset();
+        if(char after = std::streambuf::traits_type::to_char_type(stream.sgetc());
+            charType(after) != CharType::regular)
+          break;
+        else // False alarm, try again
           contents.append(sep);
-          is.seekg(pos + sizeof(sep) - 1);
-          ts.reset();
-        }
       } else
         contents.append(s);
     }
@@ -518,8 +534,8 @@ Object parseStream(TokenStream& ts, Dictionary&& dict) {
        (but real world examples show it may be omitted). Do we care?
        + our output routine inserts more whitespace before endstream,
        may need fixing if so. */
-    if(!is)
-      error = "endstream not found" + fPos(ts);
+    if(s.empty())
+      error = "End of input during reading stream data";
   }
   if(std::holds_alternative<Null>(o.contents))
     o = {Numeric{(long)contents.length()}};
@@ -530,17 +546,16 @@ Object parseStream(TokenStream& ts, Dictionary&& dict) {
 
 bool skipBrokenObject(TokenStream& ts) {
   ts.reset();
-  std::istream& is = ts.istream();
-  while(is) {
-    std::string s = pdf::readToNL(is);
-    const std::string sep = "endobj";
+  std::streambuf& stream = ts.stream();
+  const std::string sep = "endobj";
+  for(std::string s = readToNL(stream); !s.empty(); s = readToNL(stream)) {
     if(auto off = s.find(sep); off != std::string::npos) {
       if(off + sep.length() == s.length()) // separator at end of line: OK
         return true;
-      auto pos = (std::size_t)is.tellg() - s.length() + off + sep.length();
-      is.seekg(pos);
+      stream.pubseekoff(- s.length() + off + sep.length(), std::ios_base::cur);
       ts.reset();
-      if(char after = is.peek(); charType(after) != CharType::regular)
+      if(char after = std::streambuf::traits_type::to_char_type(stream.sgetc());
+          charType(after) != CharType::regular)
         return true;
     }
   }
@@ -558,9 +573,11 @@ TopLevelObject parseNamedObject(TokenStream& ts) {
     return {Invalid{ts, "Misshaped named object header (obj)"}};
   Object contents = readObject(ts);
   std::string error{};
-  if(ts.read() != "endobj") {
-    error = "endobj not found" + fPos(ts);
-    if(ts) {
+  if(std::string s = ts.read(); s != "endobj") {
+    if(s.empty())
+      error = "End of input where endobj expected";
+    else {
+      error = "endobj not found" + fPos(ts);
       bool success = skipBrokenObject(ts);
       if(success)
         error.append(", continuing" + fPos(ts, true));
@@ -576,12 +593,14 @@ TopLevelObject parseXRefTable(TokenStream& ts) {
   std::string s = ts.read();
   assert(s == "xref");
   assert(ts.empty());
-  std::istream& is = ts.istream();
-  skipToNL(is);
+  std::streambuf& stream = ts.stream();
+  skipToNL(stream);
   std::vector<XRefTable::Section> sections{};
-  while(is) {
+  while(true) {
     s = ts.read();
-    if(s == "trailer")
+    if(s.empty()) // EOF
+      return {Invalid{"End of input while reading xref table"}};
+    else if(s == "trailer")
       break;
     Numeric start{s};
     if(!start.uintegral())
@@ -589,9 +608,11 @@ TopLevelObject parseXRefTable(TokenStream& ts) {
     Numeric count{ts.read()};
     if(!count.uintegral())
       return {Invalid{ts, "Broken xref subsection header (count)"}};
-    skipToNL(is);
-    s.resize(20*count.val_ulong());
-    is.read(s.data(), 20*count.val_ulong());
+    skipToNL(stream);
+    unsigned len = 20 * count.val_ulong();
+    s.resize(len);
+    if(stream.sgetn(s.data(), len) < len)
+      return {Invalid{"End of input while reading xref table"}};
     sections.push_back({start.val_ulong(), count.val_ulong(), std::move(s)});
   }
   Object trailer = readObject(ts);
@@ -647,13 +668,11 @@ TopLevelObject readTopLevelObject(TokenStream& ts) {
     return parseStartXRef(ts);
   else {
     std::string error = "Garbage or unexpected token" + fPos(ts);
-    if(ts) {
-      bool success = skipBrokenObject(ts);
-      if(success)
-        error.append(", continuing" + fPos(ts, true));
-      else
-        error.append(", no recovery until end of input");
-    }
+    bool success = skipBrokenObject(ts);
+    if(success)
+      error.append(", continuing" + fPos(ts, true));
+    else
+      error.append(", no recovery until end of input");
     return {Invalid{std::move(error)}};
   }
 }

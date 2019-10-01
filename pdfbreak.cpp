@@ -13,26 +13,25 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::ifstream infs{argv[1]};
-  if(!infs) {
+  std::filebuf file{};
+  if(!file.open(argv[1], std::ios_base::in | std::ios_base::binary)) {
     std::cerr << "Can't open " << argv[1] << " for reading.\n";
     return 1;
   }
+  pdf::TokenStream parser{file};
 
   try {
-    std::string line;
-    if(infs.peek() == '%') {
-      std::getline(infs, line);
+    if(file.sgetc() == '%') {
+      std::string line = pdf::readToNL(file);
       if(std::strncmp(line.data(), "%PDF-1.", 6))
         std::clog << "Warning: PDF header missing\n";
     } else {
       std::clog << "Warning: PDF header missing\n";
     }
 
-    pdf::TokenStream ints{infs};
     unsigned trailercnt = 0;
-    while(ints) {
-      pdf::TopLevelObject obj = readTopLevelObject(ints);
+    while(true) {
+      pdf::TopLevelObject obj = pdf::readTopLevelObject(parser);
       if(std::holds_alternative<pdf::NamedObject>(obj.contents)) {
         const pdf::NamedObject& nmo = std::get<pdf::NamedObject>(obj.contents);
         std::ostringstream oss{};

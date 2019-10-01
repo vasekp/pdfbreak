@@ -1,7 +1,6 @@
 #ifndef PDF_H
 #define PDF_H
 
-#include <istream>
 #include <ostream>
 #include <stack>
 #include <string>
@@ -13,16 +12,16 @@
 namespace pdf {
 
 class TokenStream {
-  std::istream& is;
-  std::stack<std::string> stack;
+  std::streambuf& _stream;
+  std::stack<std::string> _stack;
 
   public:
-  TokenStream(std::istream& stream_) : is(stream_), stack() { }
+  TokenStream(std::streambuf& stream_) : _stream(stream_), _stack() { }
 
   std::string read() {
-    if(!stack.empty()) {
-      auto ret = stack.top();
-      stack.pop();
+    if(!_stack.empty()) {
+      auto ret = _stack.top();
+      _stack.pop();
       return ret;
     } else
       return underflow();
@@ -33,30 +32,29 @@ class TokenStream {
   }
 
   void unread(std::string t) {
-    stack.push(std::move(t));
+    _stack.push(std::move(t));
   }
 
   std::string peek() {
-    if(stack.empty())
-      stack.push(underflow());
-    return stack.top();
+    if(_stack.empty())
+      _stack.push(underflow());
+    return _stack.top();
   }
 
   bool empty() const {
-    return stack.empty();
+    return _stack.empty();
   }
 
-  operator bool() const {
-    return !stack.empty() || is.good();
-  }
+  /*operator bool() const {
+    return !_stack.empty() || is.good();
+  }*/
 
-  std::istream& istream() const {
-    return is;
+  std::streambuf& stream() const {
+    return _stream;
   }
 
   void reset() {
-    stack = {};
-    is.clear();
+    _stack = {};
   }
 
   private:
@@ -233,6 +231,8 @@ inline std::ostream& operator<< (std::ostream& os, const TopLevelObject& obj) {
   obj.dump(os, 0);
   return os;
 }
+
+std::string readToNL(std::streambuf&);
 
 } // namespace pdf
 
