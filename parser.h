@@ -4,6 +4,7 @@
 #include <stack>
 #include <string>
 #include <stdexcept>
+#include <cassert>
 
 #include "pdf.h"
 

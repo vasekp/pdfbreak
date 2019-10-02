@@ -20,9 +20,12 @@ CharType charType(char c) {
 }
 
 void skipToNL(std::streambuf& stream) {
-  for(auto cInt = stream.sbumpc(); cInt != std::streambuf::traits_type::eof(); cInt = stream.sbumpc())
+  for(auto cInt = stream.sgetc(); cInt != std::streambuf::traits_type::eof(); cInt = stream.snextc())
     if(char c = std::streambuf::traits_type::to_char_type(cInt); c == '\n' || c == '\r')
       break;
+  if(std::streambuf::traits_type::to_char_type(stream.sbumpc()) == '\r')
+    if(std::streambuf::traits_type::to_char_type(stream.sgetc()) == '\n')
+      stream.sbumpc();
 }
 
 std::string readToNL(std::streambuf& stream) {
@@ -30,8 +33,14 @@ std::string readToNL(std::streambuf& stream) {
   for(auto cInt = stream.sbumpc(); cInt != std::streambuf::traits_type::eof(); cInt = stream.sbumpc()) {
     char c = std::streambuf::traits_type::to_char_type(cInt);
     s.push_back(c);
-    if(c == '\n' || c == '\r')
+    if(c == '\n')
       break;
+    if(c == '\r')
+      if(std::streambuf::traits_type::to_char_type(stream.sgetc()) == '\n') {
+        s.push_back('\n');
+        stream.sbumpc();
+        break;
+      }
   }
   return s;
 }
@@ -481,7 +490,7 @@ TopLevelObject readTopLevelObject(std::streambuf& stream) {
     std::string error = "Garbage or unexpected token at " + format_position(ts.lastpos());
     bool success = skipToEndobj(ts.stream());
     if(success)
-      error.append(", skipping past endobj at " + format_position(ts.lastpos()));
+      error.append(", skipping past endobj at " + format_position(ts.pos() - 6));
     else
       error.append(", no recovery until end of input");
     return {Invalid{std::move(error)}};
