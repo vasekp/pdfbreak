@@ -63,20 +63,21 @@ void print_offset(std::ostream& os, unsigned off, const std::string& text) {
 /***** Implementation of TokenStream *****/
 
 std::string TokenStream::underflow() {
-  std::streambuf::traits_type::int_type cInt;
   char c;
-  for(cInt = _stream.sgetc(); cInt != std::streambuf::traits_type::eof(); cInt = _stream.snextc())
-    if(c = std::streambuf::traits_type::to_char_type(cInt); charType(c) != CharType::ws)
+  for(auto cInt = _stream.sgetc(); ; cInt = _stream.snextc()) {
+    if(cInt == std::streambuf::traits_type::eof())
+      return "";
+    c = std::streambuf::traits_type::to_char_type(cInt);
+    if(charType(c) != CharType::ws)
       break;
-  if(cInt == std::streambuf::traits_type::eof())
-    return "";
+  }
   switch(charType(c)) {
     case CharType::delim:
       if(c == '%') {
         skipToNL(_stream);
         return underflow();
       } else if(c == '<' || c == '>') {
-        if(cInt = _stream.snextc(); std::streambuf::traits_type::to_char_type(cInt) == c) {
+        if(auto cInt = _stream.snextc(); std::streambuf::traits_type::to_char_type(cInt) == c) {
           _stream.sbumpc();
           return {c, c};
         }
@@ -314,7 +315,7 @@ Object parseStringLiteral(TokenStream& ts) {
   std::string error{};
   unsigned parens = 0;
   
-  while(auto cInt = stream.sbumpc()) {
+  for(auto cInt = stream.sbumpc(); ; cInt = stream.sbumpc()) {
     if(cInt == std::streambuf::traits_type::eof()) {
       error = "End of input while reading string";
       break;
@@ -363,7 +364,7 @@ Object parseStringLiteral(TokenStream& ts) {
           break;
         case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
           {
-            char d = c - '0';
+            int d = c - '0';
             cInt = stream.sgetc();
             if(cInt == std::streambuf::traits_type::eof()) {
               error = "End of input while reading string";
@@ -377,12 +378,17 @@ Object parseStringLiteral(TokenStream& ts) {
                 error = "End of input while reading string";
                 break;
               }
+              c = std::streambuf::traits_type::to_char_type(cInt);
               if(c >= '0' && c <= '7') {
                 stream.sbumpc();
                 d = d*8 + (c - '0');
               }
             }
-            ret.push_back(d);
+            if(d > 255) {
+              error = "Invalid octal value";
+              break;
+            }
+            ret.push_back(std::streambuf::traits_type::to_char_type(d));
           }
           break;
         default:
@@ -406,7 +412,7 @@ Object parseStringHex(TokenStream& ts) {
   unsigned odd = 0;
   char d = 0;
 
-  while(auto cInt = stream.sbumpc()) {
+  for(auto cInt = stream.sbumpc(); ; cInt = stream.sbumpc()) {
     if(cInt == std::streambuf::traits_type::eof()) {
       error = "End of input while reading string";
       break;
@@ -644,7 +650,10 @@ Object readObject(TokenStream& ts) {
     return parseDict(ts);
   else if(t == "[")
     return parseArray(ts);
-  else if(t == "true" || t == "false") {
+  else if(t == "null") {
+    ts.consume();
+    return {Null{}};
+  } else if(t == "true" || t == "false") {
     ts.consume();
     return {Boolean{t == "true"}};
   } else if(Numeric n1{t}; n1.valid()) {
