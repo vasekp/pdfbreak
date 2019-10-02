@@ -2,68 +2,16 @@
 #define PDF_H
 
 #include <ostream>
-#include <stack>
 #include <string>
 #include <vector>
 #include <map>
 #include <variant>
-#include <cassert>
 
 namespace pdf {
 
-class TokenStream {
-  std::streambuf& _stream;
-  std::stack<std::string> _stack;
-
-  public:
-  TokenStream(std::streambuf& stream_) : _stream(stream_), _stack() { }
-
-  std::string read() {
-    if(!_stack.empty()) {
-      auto ret = _stack.top();
-      _stack.pop();
-      return ret;
-    } else
-      return underflow();
-  }
-
-  void consume() {
-    read();
-  }
-
-  void unread(std::string t) {
-    _stack.push(std::move(t));
-  }
-
-  std::string peek() {
-    if(_stack.empty())
-      _stack.push(underflow());
-    return _stack.top();
-  }
-
-  bool empty() const {
-    return _stack.empty();
-  }
-
-  /*operator bool() const {
-    return !_stack.empty() || is.good();
-  }*/
-
-  std::streambuf& stream() const {
-    return _stream;
-  }
-
-  void reset() {
-    _stack = {};
-  }
-
-  private:
-  std::string underflow();
-};
-
+/***** PDF object types *****/
 
 struct Object;
-
 
 struct Null {
   bool failed() const { return false; }
@@ -145,7 +93,7 @@ class Invalid {
   public:
   Invalid() : error{} { }
   Invalid(std::string&& error_) : error(std::move(error_)) { }
-  Invalid(const TokenStream&, std::string&&);
+  Invalid(std::string&& error_, std::size_t offset);
 
   const std::string& get_error() const { return error; }
   bool failed() const { return true; }
@@ -174,6 +122,8 @@ struct Object {
   }
 };
 
+
+/***** "Top-level" objects *****/
 
 struct NamedObject {
   unsigned long num;
@@ -219,8 +169,6 @@ struct TopLevelObject {
   }
 };
 
-Object readObject(TokenStream&);
-TopLevelObject readTopLevelObject(TokenStream&);
 
 inline std::ostream& operator<< (std::ostream& os, const Object& obj) {
   obj.dump(os, 0);
@@ -231,8 +179,6 @@ inline std::ostream& operator<< (std::ostream& os, const TopLevelObject& obj) {
   obj.dump(os, 0);
   return os;
 }
-
-std::string readToNL(std::streambuf&);
 
 } // namespace pdf
 
