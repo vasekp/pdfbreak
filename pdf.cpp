@@ -90,10 +90,10 @@ void Numeric::dump(std::ostream& os, unsigned off) const {
 
 void String::dump(std::ostream& os, unsigned off) const {
   if(hex) {
-    print_offset(os, off, "<");
+    print_offset(os, off, "< ");
     for(char c : val) {
-      char buf[3];
-      sprintf(buf, "%02X", (unsigned char)c);
+      char buf[4];
+      sprintf(buf, "%02X ", (unsigned char)c);
       os << buf;
     }
     os << '>';
