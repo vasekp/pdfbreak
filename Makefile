@@ -1,7 +1,7 @@
 CXXFLAGS = -std=c++17 -g -Wall -Wextra -pedantic -fno-diagnostics-show-caret -Izstr/src/ -lz
-LDFLAGS = -lstdc++
-HEADERS = pdf.h
-SOURCES = pdfbreak.cpp pdf.cpp parser.cpp pdfreader.cpp
+LDFLAGS = -lstdc++ -lz
+HEADERS = pdf.h parser.h pdfreader.h pdffilter.h
+SOURCES = pdfbreak.cpp pdf.cpp parser.cpp pdfreader.cpp pdffilter.cpp
 OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
 
 pdfbreak: $(OBJECTS)

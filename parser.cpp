@@ -1,8 +1,10 @@
+//#include <sstream>
 #include <cstdlib>
 #include <cassert>
 
 #include "pdf.h"
 #include "parser.h"
+//#include "pdffilter.h"
 
 namespace pdf::parser {
 
@@ -364,6 +366,10 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
   }
   if(std::holds_alternative<Null>(o.contents))
     o = {Numeric{(long)contents.length()}};
+  /*std::stringbuf strb{contents};
+  codec::DeflateDecoder dd{strb};
+  std::ostringstream oss{};
+  oss << &dd;*/
   return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 
