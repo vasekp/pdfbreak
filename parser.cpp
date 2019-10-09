@@ -369,7 +369,13 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
   /*std::stringbuf strb{contents};
   codec::DeflateDecoder dd{strb};
   std::ostringstream oss{};
-  oss << &dd;*/
+  oss.exceptions(std::ios::failbit);
+  try {
+    oss << &dd;
+  }
+  catch(codec::decode_error& e) {
+    error = e.what();
+  }*/
   return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 

@@ -1,9 +1,20 @@
+#include <sstream>
+#include <stdexcept>
+#include <cassert>
 #include <zlib.h>
 #include "pdffilter.h"
 
 // Inspired by https://github.com/mateidavid/zstr
 
 namespace pdf::codec {
+
+std::string decode_error::format(std::string_view component, std::string_view error, std::streamoff where) {
+  std::ostringstream oss{};
+  oss << component << ": " << error;
+  if(where != -1)
+   oss << " at position " << where;
+  return oss.str();
+}
 
 namespace internal {
 
@@ -21,7 +32,10 @@ class ZStream {
       ret = ::deflateInit(&_stream, Z_DEFAULT_COMPRESSION);
     else
       ret = ::inflateInit(&_stream);
-    if(ret != Z_OK) { /*TODO throw*/ }
+    if(ret != Z_OK) {
+      assert(_stream.msg != NULL);
+      throw decode_error("zlib", _stream.msg, -1);
+    }
   }
 
   ~ZStream() {
@@ -33,10 +47,6 @@ class ZStream {
 
   z_stream& get() {
     return _stream;
-  }
-
-  z_stream* getp() {
-    return &_stream;
   }
 };
 
@@ -68,7 +78,13 @@ std::streambuf::int_type DeflateDecoder::underflow() {
     if(ret != Z_OK)
       ret = ::inflate(&zstr, Z_SYNC_FLUSH);
     readBytes = bufSize - zstr.avail_out;
-    if(ret != Z_OK && readBytes == 0) { /*TODO throw*/ }
+    if(ret != Z_OK && readBytes == 0) {
+      assert(zstr.msg != NULL);
+      std::streamoff pos = static_cast<std::streamoff>(
+          in_sbuf.pubseekoff(0, std::ios::cur, std::ios::in))
+        - zstr.avail_in;
+      throw decode_error("zlib", zstr.msg, pos);
+    }
   } while (readBytes == 0);
   setg(&outBuffer[0], &outBuffer[0], &outBuffer[readBytes]);
   return outBuffer[0];

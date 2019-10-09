@@ -6,6 +6,16 @@
 
 namespace pdf::codec {
 
+class decode_error : public std::runtime_error {
+  public:
+  decode_error(std::string_view component, std::string_view error, std::streamoff where)
+    : std::runtime_error(format(component, error, where))
+  { }
+
+  private:
+  std::string format(std::string_view component, std::string_view error, std::streamoff where);
+};
+
 namespace internal {
   enum class direction {
     compress,
