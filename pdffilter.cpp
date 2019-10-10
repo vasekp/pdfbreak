@@ -88,7 +88,7 @@ std::streambuf::int_type DeflateDecoder::underflow() {
     }
   } while (readBytes == 0);
   setg(&outBuffer[0], &outBuffer[0], &outBuffer[readBytes]);
-  return outBuffer[0];
+  return traits_type::to_int_type(outBuffer[0]);
 }
 
 } // namespace pdf::codec

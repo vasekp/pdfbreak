@@ -403,7 +403,8 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
   }
   catch(codec::decode_error& e) {
     error = e.what();
-  }*/
+  }
+  contents = chopNL(oss.str());*/
   return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 
