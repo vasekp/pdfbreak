@@ -1,10 +1,11 @@
-#ifndef PDFREADER_H
-#define PDFREADER_H
+#ifndef PDF_READER_H
+#define PDF_READER_H
 
 #include <streambuf>
 #include <utility>
 #include <optional>
-#include "pdf.h"
+
+#include "pdfobjects.h"
 
 namespace pdf {
 

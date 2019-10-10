@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <cassert>
 #include <zlib.h>
+
 #include "pdffilter.h"
 
 // Inspired by https://github.com/mateidavid/zstr

@@ -2,8 +2,8 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "pdf.h"
-#include "parser.h"
+#include "pdfobjects.h"
+#include "pdfparser.h"
 //#include "pdffilter.h"
 
 namespace pdf::parser {

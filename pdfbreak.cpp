@@ -2,9 +2,8 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-//#include "zstr.hpp"
 
-#include "pdf.h"
+#include "pdfobjects.h"
 #include "pdfreader.h"
 
 int main(int argc, char* argv[]) {

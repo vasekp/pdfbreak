@@ -1,5 +1,5 @@
-#ifndef PDF_H
-#define PDF_H
+#ifndef PDF_OBJECTS_H
+#define PDF_OBJECTS_H
 
 #include <ostream>
 #include <string>

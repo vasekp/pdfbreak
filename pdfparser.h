@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <cassert>
 
-#include "pdf.h"
+#include "pdfobjects.h"
 
 namespace pdf::parser {
 

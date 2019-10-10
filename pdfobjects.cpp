@@ -1,8 +1,8 @@
 #include <cstdio>
 #include <cassert>
 
-#include "pdf.h"
-#include "parser.h"
+#include "pdfobjects.h"
+#include "pdfparser.h"
 
 namespace pdf {
 
