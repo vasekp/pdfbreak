@@ -23,6 +23,12 @@ CharType charType(char c) {
 
 namespace {
 
+void skipToLF(std::streambuf& stream) {
+  for(auto cInt = stream.sbumpc(); cInt != std::streambuf::traits_type::eof(); cInt = stream.sbumpc())
+    if(char c = std::streambuf::traits_type::to_char_type(cInt); c == '\n')
+      break;
+}
+
 void skipToNL(std::streambuf& stream) {
   for(auto cInt = stream.sgetc(); cInt != std::streambuf::traits_type::eof(); cInt = stream.snextc())
     if(char c = std::streambuf::traits_type::to_char_type(cInt); c == '\n' || c == '\r')
@@ -352,7 +358,7 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
   assert(s == "stream");
   assert(ts.empty());
   std::streambuf& stream = ts.stream();
-  skipToNL(stream);
+  skipToLF(stream);
   std::string contents{};
   std::string error{};
   if(auto oLen = dict.lookup("Length");
@@ -384,12 +390,9 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
       } else
         contents.append(s);
     }
-    /* TODO: PDF spec says newline before endstream should be ignored
-       (but real world examples show it may be omitted). Do we care?
-       + our output routine inserts more whitespace before endstream,
-       may need fixing if so. */
     if(s.empty())
       error = "End of input during reading stream data";
+    chopNL(std::move(contents));
   }
   /*std::stringbuf strb{contents};
   codec::DeflateDecoder dd{strb};

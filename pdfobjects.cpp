@@ -149,11 +149,9 @@ std::optional<Object> Dictionary::lookup(const std::string& key) const {
 
 void Stream::dump(std::ostream& os, unsigned off) const {
   dict.dump(os, off);
-  os << '\n';
-  print_offset(os, off, "stream\n");
+  os << "\nstream\n";
   os.write(data.data(), data.length());
-  os << '\n';
-  print_offset(os, off, "endstream");
+  os << "\nendstream";
   if(!error.empty()) {
     os << '\n';
     print_offset(os, off, "% !!! " + error);
