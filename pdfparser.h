@@ -84,9 +84,7 @@ enum class CharType {
 };
 
 CharType charType(char c);
-void skipToNL(std::streambuf& stream);
-std::string readToNL(std::streambuf& stream);
-std::string format_position(std::size_t offset);
+std::string readLine(std::streambuf& stream);
 
 Object parseName(TokenParser& ts);
 Object parseNumberIndir(TokenParser& ts, Numeric&& n1);

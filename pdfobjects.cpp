@@ -2,25 +2,21 @@
 #include <cassert>
 
 #include "pdfobjects.h"
-#include "pdfparser.h"
 
 namespace pdf {
 
 /***** Implementation of PDF object classes *****/
 
+namespace {
+
 void print_offset(std::ostream& os, unsigned off, const std::string& text) {
   os << std::string(2*off, ' ') << text;
 }
 
+} // anonymous namespace
+
 void Null::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, "null");
-}
-
-Invalid::Invalid(std::string&& error_, std::size_t offset)
-  : error(std::move(error_))
-{
-  error.append(" at ");
-  error.append(parser::format_position(offset));
 }
 
 void Invalid::dump(std::ostream& os, unsigned off) const {

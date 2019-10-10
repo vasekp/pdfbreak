@@ -204,7 +204,6 @@ class Invalid : public internal::ObjBase {
   public:
   Invalid() : error{} { }
   Invalid(std::string&& error_) : error(std::move(error_)) { }
-  Invalid(std::string&& error_, std::size_t offset);
 
   const std::string& get_error() const { return error; }
 

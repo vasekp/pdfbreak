@@ -21,6 +21,8 @@ CharType charType(char c) {
   }
 }
 
+namespace {
+
 void skipToNL(std::streambuf& stream) {
   for(auto cInt = stream.sgetc(); cInt != std::streambuf::traits_type::eof(); cInt = stream.snextc())
     if(char c = std::streambuf::traits_type::to_char_type(cInt); c == '\n' || c == '\r')
@@ -47,12 +49,34 @@ std::string readToNL(std::streambuf& stream) {
   return s;
 }
 
+std::string chopNL(std::string&& in) {
+  if(in.empty())
+    return in;
+  if(in.back() == '\r')
+    in.resize(in.length() - 1);
+  else if(in.back() == '\n') {
+    in.resize(in.length() - 1);
+    if(!in.empty() && in.back() == '\r')
+      in.resize(in.length() - 1);
+  }
+  return in;
+}
+
 std::string format_position(std::size_t offset) {
   char buf[20];
   std::snprintf(buf, 50, "%zu", offset);
   return {buf};
 }
 
+std::string report_position(const TokenParser& ts) {
+  return " at " + format_position(ts.lastpos());
+}
+
+} // anonymous namespace
+
+std::string readLine(std::streambuf& stream) {
+  return chopNL(readToNL(stream));
+}
 
 /***** Implementation of TokenParser *****/
 
@@ -110,7 +134,7 @@ Object parseName(TokenParser& ts) {
   if(charType(s[0]) == CharType::regular)
     return {Name{std::move(s)}};
   else
-    return {Invalid{"/ not followed by a proper name", ts.lastpos()}};
+    return {Invalid{"/ not followed by a proper name" + report_position(ts)}};
 }
 
 Object parseNumberIndir(TokenParser& ts, Numeric&& n1) {
@@ -305,7 +329,7 @@ Object parseDict(TokenParser& ts) {
       break;
     }
     Object oVal = (ts.peek() == ">>")
-      ? Object{Invalid{"Value not present", ts.lastpos()}}
+      ? Object{Invalid{"Value not present" + report_position(ts)}}
       : readObject(ts);
     bool failed = oVal.failed();
     dict.emplace(std::move(key), std::move(oVal));
@@ -338,7 +362,7 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
     if(std::size_t lenRead = stream.sgetn(contents.data(), len); lenRead < len)
       error = "End of input during reading stream data, read " + format_position(lenRead) + " bytes";
     else if(ts.read() != "endstream")
-      error = "endstream not found at " + format_position(ts.lastpos());
+      error = "endstream not found" + report_position(ts);
   } else {
     const std::string sep = "endstream";
     for(s = readToNL(stream); !s.empty(); s = readToNL(stream)) {
@@ -400,19 +424,19 @@ bool skipToEndobj(std::streambuf& stream) {
 TopLevelObject parseNamedObject(TokenParser& ts) {
   Numeric num{ts.read()};
   if(!num.uintegral())
-    return {Invalid{"Misshaped named object header (gen)", ts.lastpos()}};
+    return {Invalid{"Misshaped named object header (gen)" + report_position(ts)}};
   Numeric gen{ts.read()};
   if(!gen.uintegral())
-    return {Invalid{"Misshaped named object header (gen)", ts.lastpos()}};
+    return {Invalid{"Misshaped named object header (gen)" + report_position(ts)}};
   if(ts.read() != "obj")
-    return {Invalid{"Misshaped named object header (obj)", ts.lastpos()}};
+    return {Invalid{"Misshaped named object header (obj)" + report_position(ts)}};
   Object contents = readObject(ts);
   std::string error{};
   if(std::string s = ts.read(); s != "endobj") {
     if(s.empty())
       error = "End of input where endobj expected";
     else
-      error = "endobj not found at " + format_position(ts.lastpos());
+      error = "endobj not found" + report_position(ts);
   }
   return {NamedObject{num.val_ulong(), gen.val_ulong(), std::move(contents),
     std::move(error)}};
@@ -433,10 +457,10 @@ TopLevelObject parseXRefTable(TokenParser& ts) {
       break;
     Numeric start{s};
     if(!start.uintegral())
-      return {Invalid{"Broken xref subsection header (start)", ts.lastpos()}};
+      return {Invalid{"Broken xref subsection header (start)" + report_position(ts)}};
     Numeric count{ts.read()};
     if(!count.uintegral())
-      return {Invalid{"Broken xref subsection header (count)", ts.lastpos()}};
+      return {Invalid{"Broken xref subsection header (count)" + report_position(ts)}};
     skipToNL(stream);
     unsigned len = 20 * count.val_ulong();
     s.resize(len);
@@ -453,7 +477,7 @@ TopLevelObject parseStartXRef(TokenParser& ts) {
   assert(s == "startxref");
   Numeric num{ts.read()};
   if(!num.uintegral())
-    return {Invalid{"Broken startxref", ts.lastpos()}};
+    return {Invalid{"Broken startxref" + report_position(ts)}};
   return {StartXRef{num.val_ulong()}};
 }
 
@@ -483,7 +507,7 @@ Object readObject(TokenParser& ts) {
     return parseNumberIndir(ts, std::move(n1));
   } else {
     ts.consume();
-    return {Invalid{"Garbage or unexpected token", ts.lastpos()}};
+    return {Invalid{"Garbage or unexpected token" + report_position(ts)}};
   }
 }
 
@@ -500,7 +524,7 @@ TopLevelObject readTopLevelObject(std::streambuf& stream) {
   else if(t == "startxref")
     return parseStartXRef(ts);
   else {
-    std::string error = "Garbage or unexpected token at " + format_position(ts.lastpos());
+    std::string error = "Garbage or unexpected token" + report_position(ts);
     bool success = skipToEndobj(ts.stream());
     if(success)
       error.append(", skipping past endobj at " + format_position(ts.pos() - 6));

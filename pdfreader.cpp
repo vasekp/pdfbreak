@@ -8,7 +8,7 @@ namespace pdf {
 std::optional<std::pair<unsigned, unsigned>> Reader::readVersion() {
   if(std::streambuf::traits_type::to_char_type(_stream.sgetc()) != '%')
     return {};
-  std::string line = parser::readToNL(_stream);
+  std::string line = parser::readLine(_stream);
   unsigned v1, v2;
   int len;
   if(sscanf(line.data(), "%%PDF-%u.%u%n", &v1, &v2, &len) != 2)
