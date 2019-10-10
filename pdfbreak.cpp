@@ -26,26 +26,27 @@ int main(int argc, char* argv[]) {
   unsigned trailercnt = 0;
   while(true) {
     pdf::TopLevelObject obj = reader.readTopLevelObject();
-    if(std::holds_alternative<pdf::NamedObject>(obj.contents)) {
-      const pdf::NamedObject& nmo = std::get<pdf::NamedObject>(obj.contents);
+    if(obj.is<pdf::NamedObject>()) {
+      const pdf::NamedObject& nmo = obj.get<pdf::NamedObject>();
       std::ostringstream oss{};
-      oss << argv[1] << '-' << nmo.num << '.' << nmo.gen << ".obj";
+      auto [num, gen] = nmo.numgen();
+      oss << argv[1] << '-' << num << '.' << gen << ".obj";
       std::ofstream ofs{oss.str()};
       ofs << obj << '\n';
       std::clog << "Saving: " << oss.str()
         << (obj.failed() ? " (errors)\n" : "\n");
-    } else if(std::holds_alternative<pdf::XRefTable>(obj.contents)) {
-      const pdf::Object& trailer = std::get<pdf::XRefTable>(obj.contents).trailer;
+    } else if(obj.is<pdf::XRefTable>()) {
+      const pdf::Object& trailer = obj.get<pdf::XRefTable>().trailer();
       std::clog << "Skipping xref table\n";
       std::ostringstream oss{};
       oss << argv[1] << "-trailer" << ++trailercnt << ".obj";
       std::ofstream ofs{oss.str()};
       ofs << "trailer\n" << trailer << '\n';
       std::clog << "Saving: " << oss.str() << '\n';
-    } else if(std::holds_alternative<pdf::StartXRef>(obj.contents)) {
+    } else if(obj.is<pdf::StartXRef>()) {
       std::clog << "Skipping startxref marker\n";
-    } else if(std::holds_alternative<pdf::Invalid>(obj.contents)) {
-      std::string error = std::get<pdf::Invalid>(obj.contents).get_error();
+    } else if(obj.is<pdf::Invalid>()) {
+      std::string error = obj.get<pdf::Invalid>().get_error();
       if(error.empty()) // end of input
         break;
       std::clog << "!!! " << error << '\n';

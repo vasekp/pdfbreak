@@ -287,7 +287,7 @@ Object parseArray(TokenParser& ts) {
 Object parseDict(TokenParser& ts) {
   std::string s = ts.read();
   assert(s == "<<");
-  std::map<std::string, Object> tmp{};
+  std::map<std::string, Object> dict{};
   std::string error{};
   while(ts.peek() != ">>") {
     Object oKey = readObject(ts);
@@ -295,29 +295,32 @@ Object parseDict(TokenParser& ts) {
       error = "Error reading key";
       break;
     }
-    if(!std::holds_alternative<Name>(oKey.contents)) {
+    if(!oKey.is<Name>()) {
       error = "Key not a name";
       break;
     }
-    std::string name = std::get<Name>(oKey.contents).val;
-    Object oVal;
-    if(ts.peek() == ">>")
-      oVal = {Invalid{"Value not present", ts.lastpos()}};
-    else
-      oVal = readObject(ts);
+    std::string key = oKey.get<Name>();
+    if(dict.find(key) != dict.end()) {
+      error = "Dulpicite key";
+      break;
+    }
+    Object oVal = (ts.peek() == ">>")
+      ? Object{Invalid{"Value not present", ts.lastpos()}}
+      : readObject(ts);
     bool failed = oVal.failed();
-    tmp[name] = std::move(oVal);
+    dict.emplace(std::move(key), std::move(oVal));
+    // Yes, we want to store the value even if parsing failed
     if(failed) {
       error = "Error reading value";
       break;
     }
   }
   ts.consume();
-  Dictionary dict{std::move(tmp), std::move(error)};
+  Dictionary oDict{std::move(dict), std::move(error)};
   if(ts.peek() == "stream")
-    return parseStream(ts, std::move(dict));
+    return parseStream(ts, std::move(oDict));
   else
-    return {std::move(dict)};
+    return {std::move(oDict)};
 }
 
 Object parseStream(TokenParser& ts, Dictionary&& dict) {
@@ -326,11 +329,11 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
   assert(ts.empty());
   std::streambuf& stream = ts.stream();
   skipToNL(stream);
-  Object& o = dict.val["Length"];
   std::string contents{};
   std::string error{};
-  if(std::holds_alternative<Numeric>(o.contents)) {
-    unsigned len = std::get<Numeric>(o.contents).val_long();
+  if(auto oLen = dict.lookup("Length");
+      oLen && oLen->is<Numeric>() && oLen->get<Numeric>().uintegral()) {
+    auto len = oLen->get<Numeric>().val_ulong();
     contents.resize(len);
     if(std::size_t lenRead = stream.sgetn(contents.data(), len); lenRead < len)
       error = "End of input during reading stream data, read " + format_position(lenRead) + " bytes";
@@ -364,8 +367,6 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
     if(s.empty())
       error = "End of input during reading stream data";
   }
-  if(std::holds_alternative<Null>(o.contents))
-    o = {Numeric{(long)contents.length()}};
   /*std::stringbuf strb{contents};
   codec::DeflateDecoder dd{strb};
   std::ostringstream oss{};

@@ -143,6 +143,14 @@ void Dictionary::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, ">>");
 }
 
+std::optional<Object> Dictionary::lookup(const std::string& key) const {
+  auto it = val.find(key);
+  if(it == val.end())
+    return {};
+  else
+    return {it->second};
+}
+
 void Stream::dump(std::ostream& os, unsigned off) const {
   dict.dump(os, off);
   os << '\n';
@@ -176,11 +184,11 @@ void NamedObject::dump(std::ostream& os, unsigned off) const {
 
 void XRefTable::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, "xref\n");
-  for(const auto& section : table)
+  for(const auto& section : _table)
     os << section.start << ' ' << section.count << '\n'
       << section.data /* << '\n' */;
   print_offset(os, off, "trailer\n");
-  trailer.dump(os, off+1);
+  _trailer.dump(os, off+1);
 }
 
 void StartXRef::dump(std::ostream& os, unsigned) const {
