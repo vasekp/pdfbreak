@@ -10,8 +10,8 @@
 
 std::tuple<bool, std::string, bool> try_decompress(const pdf::Stream& str, const std::string& basename) {
   if(auto& val = str.dict().lookup("Filter"); val.is<pdf::Name>()) { // TODO array
-    const std::string& n = val.get<pdf::Name>();
-    if(n == "FlateDecode") {
+    const std::string& filter = val.get<pdf::Name>();
+    if(filter == "FlateDecode") {
       bool errors = false;
       std::string filename = basename + ".data";
       std::ofstream ofs{filename};
@@ -30,8 +30,21 @@ std::tuple<bool, std::string, bool> try_decompress(const pdf::Stream& str, const
         ofs.clear();
         ofs << "% (empty stream)";
       }
-      ofs.close();
       return {true, filename, errors};
+    } else if(filter == "DCTDecode" || filter == "JPXDecode" || filter == "JBIG2Decode") {
+      std::string ext = "";
+      if(filter == "DCTDecode")
+        ext = "jpg";
+      else if(filter == "JBIG2Decode")
+        ext = "jbig2";
+      else if(filter == "JPXDecode")
+        ext = "jpx";
+      else
+        throw std::logic_error("mismatch in handled types");
+      std::string filename = basename + "." + ext;
+      std::ofstream ofs{filename};
+      ofs << str.data();
+      return {true, filename, false};
     }
   }
   return {false, {}, false};
