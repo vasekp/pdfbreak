@@ -362,8 +362,8 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
   std::string contents{};
   std::string error{};
   if(auto oLen = dict.lookup("Length");
-      oLen && oLen->is<Numeric>() && oLen->get<Numeric>().uintegral()) {
-    auto len = oLen->get<Numeric>().val_ulong();
+      oLen.is<Numeric>() && oLen.get<Numeric>().uintegral()) {
+    auto len = oLen.get<Numeric>().val_ulong();
     contents.resize(len);
     if(std::size_t lenRead = stream.sgetn(contents.data(), len); lenRead < len)
       error = "End of input during reading stream data, read " + format_position(lenRead) + " bytes";

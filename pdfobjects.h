@@ -7,7 +7,6 @@
 #include <map>
 #include <variant>
 #include <utility>
-#include <optional>
 
 namespace pdf {
 
@@ -166,7 +165,7 @@ class Dictionary : public internal::ObjBase {
   Dictionary(V&& val_, E&& err_)
     : val(std::forward<V>(val_)), error(std::forward<E>(err_)) { }
 
-  std::optional<Object> lookup(const std::string& key) const;
+  const Object& lookup(const std::string& key) const;
 
   bool failed() const override { return !error.empty(); }
   void dump(std::ostream& os, unsigned off) const override;
@@ -210,7 +209,6 @@ class Invalid : public internal::ObjBase {
   bool failed() const override { return true; }
   void dump(std::ostream& os, unsigned off) const override;
 };
-
 
 /***** "Top-level" objects *****/
 

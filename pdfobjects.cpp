@@ -139,12 +139,14 @@ void Dictionary::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, ">>");
 }
 
-std::optional<Object> Dictionary::lookup(const std::string& key) const {
+static const Object null{Null{}};
+
+const Object& Dictionary::lookup(const std::string& key) const {
   auto it = val.find(key);
   if(it == val.end())
-    return {};
+    return null;
   else
-    return {it->second};
+    return it->second;
 }
 
 void Stream::dump(std::ostream& os, unsigned off) const {
