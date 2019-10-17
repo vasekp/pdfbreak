@@ -68,7 +68,7 @@ std::streambuf::int_type DeflateDecoder::underflow() {
   zstr.next_out = reinterpret_cast<Bytef*>(&outBuffer[0]);
   zstr.avail_out = bufSize;
   std::streamsize readBytes;
-  do {
+  while(true) {
     if(zstr.avail_in == 0) {
       zstr.next_in = reinterpret_cast<Bytef*>(&inBuffer[0]);
       zstr.avail_in = in_sbuf->sgetn(&inBuffer[0], bufSize);
@@ -79,14 +79,22 @@ std::streambuf::int_type DeflateDecoder::underflow() {
     if(ret != Z_OK && ret != Z_STREAM_END)
       ret = ::inflate(&zstr, Z_SYNC_FLUSH);
     readBytes = bufSize - zstr.avail_out;
-    if(ret != Z_OK && ret != Z_STREAM_END && readBytes == 0) {
-      assert(zstr.msg != NULL);
-      std::streamoff pos = static_cast<std::streamoff>(
-          in_sbuf->pubseekoff(0, std::ios::cur, std::ios::in))
-        - zstr.avail_in;
-      throw decode_error("zlib", zstr.msg, pos);
+    if(readBytes != 0)
+      break;
+    else {
+      if(ret == Z_STREAM_END)
+        return traits_type::eof();
+      else if(ret == Z_OK)
+        continue;
+      else {
+        assert(zstr.msg != NULL);
+        std::streamoff pos = static_cast<std::streamoff>(
+            in_sbuf->pubseekoff(0, std::ios::cur, std::ios::in))
+          - zstr.avail_in;
+        throw decode_error("zlib", zstr.msg, pos);
+      }
     }
-  } while (readBytes == 0);
+  }
   setg(&outBuffer[0], &outBuffer[0], &outBuffer[readBytes]);
   return traits_type::to_int_type(outBuffer[0]);
 }
