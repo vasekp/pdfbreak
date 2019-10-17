@@ -8,12 +8,13 @@
 #include "pdfreader.h"
 #include "pdffilter.h"
 
-std::tuple<bool, std::string, bool> try_decompress(const pdf::Stream& str, const std::string& basename) {
+std::tuple<std::string, bool> save_data(const pdf::Stream& str, const std::string& basename) {
+  std::string ext = "data";
   if(auto& val = str.dict().lookup("Filter"); val.is<pdf::Name>()) { // TODO array
     const std::string& filter = val.get<pdf::Name>();
     if(filter == "FlateDecode") {
       bool errors = false;
-      std::string filename = basename + ".data";
+      std::string filename = basename + ".unc";
       std::ofstream ofs{filename};
       std::stringbuf strb{str.data()};
       pdf::codec::DeflateDecoder dd{&strb};
@@ -30,24 +31,20 @@ std::tuple<bool, std::string, bool> try_decompress(const pdf::Stream& str, const
         ofs.clear();
         ofs << "% (empty stream)";
       }
-      return {true, filename, errors};
-    } else if(filter == "DCTDecode" || filter == "JPXDecode" || filter == "JBIG2Decode") {
-      std::string ext = "";
+      return {filename, errors};
+    } else {
       if(filter == "DCTDecode")
         ext = "jpg";
       else if(filter == "JBIG2Decode")
         ext = "jbig2";
       else if(filter == "JPXDecode")
         ext = "jpx";
-      else
-        throw std::logic_error("mismatch in handled types");
-      std::string filename = basename + "." + ext;
-      std::ofstream ofs{filename};
-      ofs << str.data();
-      return {true, filename, false};
     }
   }
-  return {false, {}, false};
+  std::string filename = basename + "." + ext;
+  std::ofstream ofs{filename};
+  ofs << str.data();
+  return {filename, false};
 }
 
 int main(int argc, char* argv[]) {
@@ -85,9 +82,8 @@ int main(int argc, char* argv[]) {
       std::clog << "Saved: " << filename << (tlo.failed() ? " (errors)\n" : "\n");
       auto& obj = nmo.object();
       if(obj.is<pdf::Stream>() && decompress) {
-        auto [success, filename, errors] = try_decompress(obj.get<pdf::Stream>(), basename);
-        if(success)
-          std::clog << "Saved aux: " << filename << (errors ? " (errors)\n" : "\n");
+        auto [filename, errors] = save_data(obj.get<pdf::Stream>(), basename);
+        std::clog << "Saved data: " << filename << (errors ? " (errors)\n" : "\n");
       }
     } else if(tlo.is<pdf::XRefTable>()) {
       const pdf::Object& trailer = tlo.get<pdf::XRefTable>().trailer();
