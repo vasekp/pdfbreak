@@ -26,7 +26,7 @@ namespace internal {
 
 class DeflateDecoder : public std::streambuf {
   public:
-  DeflateDecoder(std::streambuf& in_sbuf_);
+  DeflateDecoder(std::streambuf* in_sbuf_);
   virtual ~DeflateDecoder();
 
   virtual int_type underflow() override;
@@ -34,7 +34,7 @@ class DeflateDecoder : public std::streambuf {
   private:
   static constexpr std::size_t bufSize = 1024;
 
-  std::streambuf& in_sbuf;
+  std::streambuf* in_sbuf;
   std::unique_ptr<internal::ZStream<internal::direction::decompress>> stream;
   std::array<char_type, bufSize> inBuffer, outBuffer;
 };

@@ -1,10 +1,8 @@
-//#include <sstream>
 #include <cstdlib>
 #include <cassert>
 
 #include "pdfobjects.h"
 #include "pdfparser.h"
-//#include "pdffilter.h"
 
 namespace pdf::parser {
 
@@ -394,17 +392,6 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
       error = "End of input during reading stream data";
     chopNL(std::move(contents));
   }
-  /*std::stringbuf strb{contents};
-  codec::DeflateDecoder dd{strb};
-  std::ostringstream oss{};
-  oss.exceptions(std::ios::failbit);
-  try {
-    oss << &dd;
-  }
-  catch(codec::decode_error& e) {
-    error = e.what();
-  }
-  contents = chopNL(oss.str());*/
   return {Stream{std::move(dict), std::move(contents), std::move(error)}};
 }
 

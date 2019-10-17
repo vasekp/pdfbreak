@@ -150,13 +150,13 @@ const Object& Dictionary::lookup(const std::string& key) const {
 }
 
 void Stream::dump(std::ostream& os, unsigned off) const {
-  dict.dump(os, off);
+  _dict.dump(os, off);
   os << "\nstream\n";
-  os.write(data.data(), data.length());
+  os.write(_data.data(), _data.length());
   os << "\nendstream";
-  if(!error.empty()) {
+  if(!_error.empty()) {
     os << '\n';
-    print_offset(os, off, "% !!! " + error);
+    print_offset(os, off, "% !!! " + _error);
   }
 }
 

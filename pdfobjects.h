@@ -39,10 +39,10 @@ class tagged_union : public ObjBase {
   ~tagged_union() = default;
 
   template<typename T>
-  bool is() { return std::holds_alternative<T>(contents); }
+  bool is() const { return std::holds_alternative<T>(contents); }
 
   template<typename T>
-  T& get() { return std::get<T>(contents); }
+  const T& get() const { return std::get<T>(contents); }
 
   bool failed() const override {
     return std::visit([](auto&& arg) { return arg.failed(); }, contents);
@@ -172,18 +172,21 @@ class Dictionary : public internal::ObjBase {
 };
 
 class Stream : public internal::ObjBase {
-  Dictionary dict;
-  std::string data;
-  std::string error;
+  Dictionary _dict;
+  std::string _data;
+  std::string _error;
 
   public:
   template<typename D, typename V, typename E>
   Stream(D&& dict_, V&& data_, E&& err_)
-    : dict(std::forward<D>(dict_)),
-      data(std::forward<V>(data_)),
-      error(std::forward<E>(err_)) { }
+    : _dict(std::forward<D>(dict_)),
+      _data(std::forward<V>(data_)),
+      _error(std::forward<E>(err_)) { }
 
-  bool failed() const override { return dict.failed() || !error.empty(); }
+  const Dictionary& dict() const { return _dict; }
+  const std::string& data() const { return _data; }
+
+  bool failed() const override { return _dict.failed() || !_error.empty(); }
   void dump(std::ostream& os, unsigned off) const override;
 };
 
@@ -236,6 +239,7 @@ class NamedObject : public internal::ObjBase {
     : NamedObject(num_, gen_, std::move(contents_), "") { }
 
   std::pair<unsigned long, unsigned long> numgen() const { return {num, gen}; }
+  const Object& object() const { return contents; }
 
   bool failed() const override { return contents.failed() || !error.empty(); }
   void dump(std::ostream& os, unsigned off) const override;

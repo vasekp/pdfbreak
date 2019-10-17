@@ -53,7 +53,7 @@ class ZStream {
 
 } // namespace pdf::codec::internal
 
-DeflateDecoder::DeflateDecoder(std::streambuf& in_sbuf_)
+DeflateDecoder::DeflateDecoder(std::streambuf* in_sbuf_)
   : in_sbuf(in_sbuf_),
     stream(std::make_unique<decltype(stream)::element_type>())
 {
@@ -71,18 +71,18 @@ std::streambuf::int_type DeflateDecoder::underflow() {
   do {
     if(zstr.avail_in == 0) {
       zstr.next_in = reinterpret_cast<Bytef*>(&inBuffer[0]);
-      zstr.avail_in = in_sbuf.sgetn(&inBuffer[0], bufSize);
+      zstr.avail_in = in_sbuf->sgetn(&inBuffer[0], bufSize);
       if(zstr.avail_in == 0)
         return traits_type::eof();
     }
     int ret = ::inflate(&zstr, Z_NO_FLUSH);
-    if(ret != Z_OK)
+    if(ret != Z_OK && ret != Z_STREAM_END)
       ret = ::inflate(&zstr, Z_SYNC_FLUSH);
     readBytes = bufSize - zstr.avail_out;
-    if(ret != Z_OK && readBytes == 0) {
+    if(ret != Z_OK && ret != Z_STREAM_END && readBytes == 0) {
       assert(zstr.msg != NULL);
       std::streamoff pos = static_cast<std::streamoff>(
-          in_sbuf.pubseekoff(0, std::ios::cur, std::ios::in))
+          in_sbuf->pubseekoff(0, std::ios::cur, std::ios::in))
         - zstr.avail_in;
       throw decode_error("zlib", zstr.msg, pos);
     }
