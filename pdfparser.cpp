@@ -516,15 +516,8 @@ TopLevelObject readTopLevelObject(std::streambuf& stream) {
     return parseXRefTable(ts);
   else if(t == "startxref")
     return parseStartXRef(ts);
-  else {
-    std::string error = "Garbage or unexpected token" + report_position(ts);
-    bool success = skipToEndobj(ts.stream());
-    if(success)
-      error.append(", skipping past endobj at " + format_position(ts.pos() - 6));
-    else
-      error.append(", no recovery until end of input");
-    return {Invalid{std::move(error)}};
-  }
+  else
+    return {Invalid{"Garbage or unexpected token" + report_position(ts)}};
 }
 
 } // namespace pdf::parser
@@ -561,6 +554,16 @@ std::istream& operator>> (std::istream& is, TopLevelObject& tlo) {
         is.setstate(std::ios::failbit);
     } else if(tlo.failed())
       is.setstate(std::ios::badbit);
+  }
+  return is;
+}
+
+std::istream& skipToEndObj(std::istream& is) {
+  std::istream::sentry s(is);
+  if(s) {
+    bool success = parser::skipToEndobj(*is.rdbuf());
+    if(!success)
+      is.setstate(std::ios::failbit);
   }
   return is;
 }

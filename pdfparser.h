@@ -108,6 +108,7 @@ TopLevelObject readTopLevelObject(std::streambuf&);
 
 std::istream& operator>> (std::istream& is, Version& version);
 std::istream& operator>> (std::istream& is, TopLevelObject& tlo);
+std::istream& skipToEndObj(std::istream&);
 
 } // namespace pdf
 

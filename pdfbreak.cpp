@@ -72,7 +72,6 @@ int main(int argc, char* argv[]) {
     ifs >> tlo;
     if(ifs.eof())
       break;
-    ifs.clear();
     if(tlo.is<pdf::NamedObject>()) {
       auto& nmo = tlo.get<pdf::NamedObject>();
       std::string basename = [&nmo, &argv]() {
@@ -90,6 +89,7 @@ int main(int argc, char* argv[]) {
         auto [filename, errors] = save_data(obj.get<pdf::Stream>(), basename);
         std::clog << "Saved data: " << filename << (errors ? " (errors)\n" : "\n");
       }
+      ifs.clear();
     } else if(tlo.is<pdf::XRefTable>()) {
       const pdf::Object& trailer = tlo.get<pdf::XRefTable>().trailer();
       std::clog << "Skipping xref table\n";
@@ -104,6 +104,13 @@ int main(int argc, char* argv[]) {
       std::string error = tlo.get<pdf::Invalid>().get_error();
       assert(!error.empty());
       std::cerr << "!!! " << error << '\n';
+      ifs.clear();
+      if(ifs >> pdf::skipToEndObj)
+        std::clog << "Skipping past endobj at " << ifs.tellg() << '\n';
+      else {
+        std::clog << "End of file reached seeking enobj\n";
+        break;
+      }
     }
   }
 }
