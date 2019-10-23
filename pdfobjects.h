@@ -10,6 +10,20 @@
 
 namespace pdf {
 
+struct ObjRef {
+  unsigned long num;
+  unsigned long gen;
+};
+
+inline bool operator< (const ObjRef& lhs, const ObjRef& rhs) {
+  return lhs.num < rhs.num ||
+    (lhs.num == rhs.num && lhs.gen < rhs.gen);
+}
+
+inline bool operator== (const ObjRef& lhs, const ObjRef& rhs) {
+  return lhs.num == rhs.num && lhs.gen == rhs.gen;
+}
+
 namespace internal {
 
 class ObjBase {

@@ -9,13 +9,15 @@
 
 namespace pdf {
 
+using Version = std::pair<unsigned, unsigned>;
+
 class Reader {
   std::streambuf& _stream;
 
   public:
   Reader(std::streambuf& stream_) : _stream(stream_) { }
 
-  std::optional<std::pair<unsigned, unsigned>> readVersion();
+  std::optional<Version> readVersion();
   TopLevelObject readTopLevelObject();
 };
 

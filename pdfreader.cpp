@@ -5,7 +5,7 @@
 
 namespace pdf {
 
-std::optional<std::pair<unsigned, unsigned>> Reader::readVersion() {
+std::optional<Version> Reader::readVersion() {
   if(std::streambuf::traits_type::to_char_type(_stream.sgetc()) != '%')
     return {};
   std::string line = parser::readLine(_stream);
