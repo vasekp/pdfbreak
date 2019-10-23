@@ -107,9 +107,8 @@ std::string TokenParser::underflow() {
           _lastLen = 2;
           return {c, c};
         }
-      }
-      // All other cases
-      _stream.sbumpc();
+      } else
+        _stream.sbumpc(); // For < and > this was already done by snexts()
       _lastLen = 1;
       return {c};
     case CharType::regular:
