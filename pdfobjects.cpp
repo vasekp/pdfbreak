@@ -89,7 +89,7 @@ void String::dump(std::ostream& os, unsigned off) const {
     print_offset(os, off, "< ");
     for(char c : val) {
       char buf[4];
-      sprintf(buf, "%02X ", (unsigned char)c);
+      snprintf(buf, sizeof(buf), "%02X ", (unsigned char)c);
       os << buf;
     }
     os << '>';
@@ -100,7 +100,7 @@ void String::dump(std::ostream& os, unsigned off) const {
         os << c;
       else {
         char buf[5];
-        sprintf(buf, "\\%03o", (unsigned char)c);
+        snprintf(buf, sizeof(buf), "\\%03o", (unsigned char)c);
         os << buf;
       }
     }
