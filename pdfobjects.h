@@ -26,14 +26,12 @@ class tagged_union : public ObjBase {
   std::variant<Ts...> contents;
 
   public:
-  template<typename T>
-  tagged_union(const T& t) : contents(t) { }
 
-  template<typename T>
-  tagged_union(T&& t) : contents(std::move(t)) { }
-
+  tagged_union() = default;
   tagged_union(const tagged_union&) = default;
   tagged_union(tagged_union&&) = default;
+  tagged_union(std::variant<Ts...>&& contents_)
+    : contents(std::move(contents_)) { }
   tagged_union& operator=(const tagged_union&) = default;
   tagged_union& operator=(tagged_union&&) = default;
   ~tagged_union() = default;
@@ -204,7 +202,7 @@ class Invalid : public internal::ObjBase {
   std::string error;
 
   public:
-  Invalid() : error{} { }
+  Invalid() = default;
   Invalid(std::string&& error_) : error(std::move(error_)) { }
 
   const std::string& get_error() const { return error; }
