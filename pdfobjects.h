@@ -10,6 +10,11 @@
 
 namespace pdf {
 
+struct Version {
+  unsigned major;
+  unsigned minor;
+};
+
 struct ObjRef {
   unsigned long num;
   unsigned long gen;
@@ -232,10 +237,11 @@ class XRefTable;
 class StartXRef;
 
 using TopLevelObject = internal::tagged_union<
+    Invalid, // needs to be first for default construction,
+      // NB it makes sense that an empty TLO is invalid
     NamedObject,
     XRefTable,
-    StartXRef,
-    Invalid>;
+    StartXRef>;
 
 class NamedObject : public internal::ObjBase {
   unsigned long num;

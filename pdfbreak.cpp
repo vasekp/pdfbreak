@@ -5,7 +5,7 @@
 #include <tuple>
 
 #include "pdfobjects.h"
-#include "pdfreader.h"
+#include "pdfparser.h"
 #include "pdffilter.h"
 
 std::tuple<std::string, bool> save_data(const pdf::Stream& str, const std::string& basename) {
@@ -53,21 +53,26 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::filebuf filebuf{};
-  if(!filebuf.open(argv[1], std::ios_base::in | std::ios_base::binary)) {
+  std::ifstream ifs{argv[1], std::ios_base::in | std::ios_base::binary};
+  if(!ifs) {
     std::cerr << "Can't open " << argv[1] << " for reading.\n";
     return 1;
   }
 
   bool decompress = true; // TODO
 
-  pdf::Reader reader{filebuf};
-  if(!reader.readVersion())
+  if(pdf::Version v{}; !(ifs >> v)) {
     std::clog << "Warning: PDF header missing\n";
+    ifs.clear();
+  }
 
   unsigned trailercnt = 0;
+  pdf::TopLevelObject tlo{};
   while(true) {
-    pdf::TopLevelObject tlo = reader.readTopLevelObject();
+    ifs >> tlo;
+    if(ifs.eof())
+      break;
+    ifs.clear();
     if(tlo.is<pdf::NamedObject>()) {
       auto& nmo = tlo.get<pdf::NamedObject>();
       std::string basename = [&nmo, &argv]() {
@@ -97,9 +102,8 @@ int main(int argc, char* argv[]) {
       std::clog << "Skipping startxref marker\n";
     } else if(tlo.is<pdf::Invalid>()) {
       std::string error = tlo.get<pdf::Invalid>().get_error();
-      if(error.empty()) // end of input
-        break;
-      std::clog << "!!! " << error << '\n';
+      assert(!error.empty());
+      std::cerr << "!!! " << error << '\n';
     }
   }
 }

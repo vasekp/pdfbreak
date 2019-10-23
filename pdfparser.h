@@ -4,11 +4,14 @@
 #include <stack>
 #include <string>
 #include <stdexcept>
+#include <istream>
 #include <cassert>
 
 #include "pdfobjects.h"
 
-namespace pdf::parser {
+namespace pdf {
+
+namespace parser {
 
 class TokenParser {
   std::streambuf& _stream;
@@ -102,5 +105,10 @@ Object readObject(TokenParser&);
 TopLevelObject readTopLevelObject(std::streambuf&);
 
 } // namespace pdf::parser
+
+std::istream& operator>> (std::istream& is, Version& version);
+std::istream& operator>> (std::istream& is, TopLevelObject& tlo);
+
+} // namespace pdf
 
 #endif

@@ -4,7 +4,9 @@
 #include "pdfobjects.h"
 #include "pdfparser.h"
 
-namespace pdf::parser {
+namespace pdf {
+
+namespace parser {
 
 /***** Helper classes and functions *****/
 
@@ -526,3 +528,41 @@ TopLevelObject readTopLevelObject(std::streambuf& stream) {
 }
 
 } // namespace pdf::parser
+
+std::istream& operator>> (std::istream& is, Version& version) {
+  std::istream::sentry s(is);
+  if(s) {
+    std::streambuf& stream = *is.rdbuf();
+    if(std::streambuf::traits_type::to_char_type(stream.sgetc()) != '%') {
+      is.setstate(std::ios::failbit);
+      return is;
+    }
+    std::string line = parser::readLine(stream);
+    unsigned v1, v2;
+    int len;
+    if(sscanf(line.data(), "%%PDF-%u.%u%n", &v1, &v2, &len) != 2 || len != 8) {
+      is.setstate(std::ios::failbit);
+      return is;
+    }
+    version.major = v1;
+    version.minor = v2;
+  }
+  return is;
+}
+
+std::istream& operator>> (std::istream& is, TopLevelObject& tlo) {
+  std::istream::sentry s(is);
+  if(s) {
+    tlo = parser::readTopLevelObject(*is.rdbuf());
+    if(tlo.is<Invalid>()) {
+      if(tlo.get<Invalid>().get_error().empty())
+        is.setstate(std::ios::eofbit);
+      else
+        is.setstate(std::ios::failbit);
+    } else if(tlo.failed())
+      is.setstate(std::ios::badbit);
+  }
+  return is;
+}
+
+} // namespace pdf
