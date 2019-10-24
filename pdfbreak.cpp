@@ -8,43 +8,47 @@
 #include "pdfparser.h"
 #include "pdffilter.h"
 
-std::tuple<std::string, bool> save_data(const pdf::Stream& str, const std::string& basename) {
-  std::string ext = "data";
-  if(auto& val = str.dict().lookup("Filter"); val.is<pdf::Name>()) { // TODO array
-    const std::string& filter = val.get<pdf::Name>();
-    if(filter == "FlateDecode") {
-      bool errors = false;
-      std::string filename = basename + ".unc";
-      std::ofstream ofs{filename};
-      std::stringbuf strb{str.data()};
-      pdf::codec::DeflateDecoder dd{&strb};
-      ofs.exceptions(std::ios::failbit);
-      try {
-        ofs << &dd;
-      }
-      catch(pdf::codec::decode_error& e) {
-        ofs.clear();
-        ofs << "\n% !!! " << e.what();
-        errors = true;
-      }
-      catch(std::ios::failure& e) {
-        ofs.clear();
-        ofs << "% (empty stream)";
-      }
-      return {filename, errors};
-    } else {
-      if(filter == "DCTDecode")
+std::tuple<std::string, bool> save_data(const pdf::Stream& stm, const std::string& basename) {
+  try {
+    pdf::DecoderChain dd{stm};
+    std::string ext;
+    if(dd.complete())
+      ext = "data.d";
+    else {
+      const auto& inner = dd.last();
+      if(inner == "DCTDecode")
         ext = "jpg";
-      else if(filter == "JBIG2Decode")
+      else if(inner == "JBIG2Decode")
         ext = "jbig2";
-      else if(filter == "JPXDecode")
+      else if(inner == "JPXDecode")
         ext = "jpx";
+      else
+        ext = "data";
     }
+    std::string filename = basename + "." + ext;
+    std::ofstream ofs{filename};
+    bool errors = false;
+    ofs.exceptions(std::ios::failbit);
+    try {
+      ofs << dd.rdbuf();
+    }
+    catch(pdf::codec::decode_error& e) {
+      ofs.clear();
+      ofs << "\n% !!! " << e.what();
+      errors = true;
+    }
+    catch(std::ios::failure& e) {
+      ofs.clear();
+      ofs << "% (empty stream)";
+    }
+    return {filename, errors};
+  } catch(pdf::codec::decode_error& e) {
+    std::cerr << "!!! " << e.what() << '\n';
+    std::string filename = basename + ".data";
+    std::ofstream ofs{filename};
+    ofs << stm.data();
+    return {filename, true};
   }
-  std::string filename = basename + "." + ext;
-  std::ofstream ofs{filename};
-  ofs << str.data();
-  return {filename, false};
 }
 
 int main(int argc, char* argv[]) {
@@ -73,7 +77,7 @@ int main(int argc, char* argv[]) {
     if(ifs.eof())
       break;
     if(tlo.is<pdf::NamedObject>()) {
-      auto& nmo = tlo.get<pdf::NamedObject>();
+      const auto& nmo = tlo.get<pdf::NamedObject>();
       std::string basename = [&nmo, &argv]() {
         std::ostringstream oss{};
         auto [num, gen] = nmo.numgen();
@@ -84,10 +88,12 @@ int main(int argc, char* argv[]) {
       std::ofstream ofs{filename};
       ofs << tlo << '\n';
       std::clog << "Saved: " << filename << (tlo.failed() ? " (errors)\n" : "\n");
-      auto& obj = nmo.object();
-      if(obj.is<pdf::Stream>() && decompress) {
-        auto [filename, errors] = save_data(obj.get<pdf::Stream>(), basename);
-        std::clog << "Saved data: " << filename << (errors ? " (errors)\n" : "\n");
+      const auto& obj = nmo.object();
+      if(obj.is<pdf::Stream>()) {
+        if(decompress) {
+          auto [filename, errors] = save_data(obj.get<pdf::Stream>(), basename);
+          std::clog << "Saved data: " << filename << (errors ? " (errors)\n" : "\n");
+        }
       }
       ifs.clear();
     } else if(tlo.is<pdf::XRefTable>()) {

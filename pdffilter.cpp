@@ -5,19 +5,23 @@
 
 #include "pdffilter.h"
 
-// Inspired by https://github.com/mateidavid/zstr
+namespace pdf {
 
-namespace pdf::codec {
+namespace codec {
 
 std::string decode_error::format(std::string_view component, std::string_view error, std::streamoff where) {
   std::ostringstream oss{};
-  oss << component << ": " << error;
+  if(!component.empty())
+    oss << component << ": ";
+  oss << error;
   if(where != -1)
    oss << " at position " << where;
   return oss.str();
 }
 
 namespace internal {
+
+// Inspired by https://github.com/mateidavid/zstr
 
 template<direction dir>
 class ZStream {
@@ -100,3 +104,37 @@ std::streambuf::int_type DeflateDecoder::underflow() {
 }
 
 } // namespace pdf::codec
+
+DecoderChain::DecoderChain(const Stream& stm) : chain{}, inner{} {
+  chain.emplace_back(std::make_unique<std::stringbuf>(stm.data()));
+  const auto& filters = stm.dict().lookup("Filter");
+  if(filters.is<Null>())
+    return;
+  else if(filters.is<Name>()) {
+    const auto& filter = filters.get<Name>();
+    bool parsed = chain_append(filter);
+    if(!parsed)
+      inner = filter;
+  } else if(filters.is<Array>()) {
+    for(const auto& entry : filters.get<pdf::Array>().items()) {
+      if(!entry.is<pdf::Name>())
+        throw codec::decode_error("", "Invalid /Filter", -1);
+      const auto& filter = entry.get<pdf::Name>();
+      if(!chain_append(filter)) {
+        inner = filter;
+        break;
+      }
+    }
+  } else
+    throw codec::decode_error("", "Invalid /Filter", -1);
+}
+
+bool DecoderChain::chain_append(const std::string& filter) {
+  if(filter == "FlateDecode") {
+    chain.emplace_back(std::make_unique<pdf::codec::DeflateDecoder>(chain.back().get()));
+    return true;
+  } else // TODO other decoders
+    return false;
+}
+
+} // namespace pdf

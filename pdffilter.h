@@ -3,8 +3,13 @@
 
 #include <memory>
 #include <streambuf>
+#include <vector>
 
-namespace pdf::codec {
+#include "pdfobjects.h"
+
+namespace pdf {
+
+namespace codec {
 
 class decode_error : public std::runtime_error {
   public:
@@ -40,5 +45,21 @@ class DeflateDecoder : public std::streambuf {
 };
 
 } // namespace pdf::codec
+
+class DecoderChain {
+  std::vector<std::unique_ptr<std::streambuf>> chain;
+  std::string inner;
+
+public:
+  DecoderChain(const Stream&);
+  std::streambuf* rdbuf() const { return chain.back().get(); }
+  const std::string& last() const { return inner; }
+  bool complete() const { return last().empty(); }
+
+private:
+  bool chain_append(const std::string&);
+};
+
+} // namespace pdf
 
 #endif

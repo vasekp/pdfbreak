@@ -172,6 +172,8 @@ class Array : public internal::ObjBase {
   Array(V&& val_, E&& err_)
     : val(std::forward<V>(val_)), error(std::forward<E>(err_)) { }
 
+  const std::vector<Object>& items() const { return val; }
+
   bool failed() const override { return !error.empty(); }
   void dump(std::ostream& os, unsigned off) const override;
 };
@@ -295,7 +297,6 @@ class StartXRef : public internal::ObjBase {
 
   void dump(std::ostream& os, unsigned off) const override;
 };
-
 
 inline std::ostream& operator<< (std::ostream& os, const internal::ObjBase& obj) {
   obj.dump(os, 0);
