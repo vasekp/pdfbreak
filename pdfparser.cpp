@@ -218,7 +218,7 @@ Object parseStringLiteral(TokenParser& ts) {
             cInt = stream.sgetc();
             if(cInt == std::streambuf::traits_type::eof()) {
               error = "End of input while reading string";
-              break;
+              goto end;
             }
             c = std::streambuf::traits_type::to_char_type(cInt);
             if(c >= '0' && c <= '7') {
@@ -226,7 +226,7 @@ Object parseStringLiteral(TokenParser& ts) {
               cInt = stream.snextc();
               if(cInt == std::streambuf::traits_type::eof()) {
                 error = "End of input while reading string";
-                break;
+                goto end;
               }
               c = std::streambuf::traits_type::to_char_type(cInt);
               if(c >= '0' && c <= '7') {
@@ -235,8 +235,8 @@ Object parseStringLiteral(TokenParser& ts) {
               }
             }
             if(d > 255) {
-              error = "Invalid octal value";
-              break;
+              error = "Invalid octal value at " + format_position(ts.pos() - 4);
+              goto end;
             }
             ret.push_back(std::streambuf::traits_type::to_char_type(d));
           }
@@ -305,11 +305,12 @@ Object parseArray(TokenParser& ts) {
     bool failed = o.failed();
     array.push_back(std::move(o));
     if(failed) {
-      error = "Error reading array element";
+      error = "Error reading array element" + report_position(ts);
       break;
     }
   }
-  ts.consume();
+  if(ts.peek() == "]")
+    ts.consume();
   return {Array{std::move(array), std::move(error)}};
 }
 
@@ -321,16 +322,16 @@ Object parseDict(TokenParser& ts) {
   while(ts.peek() != ">>") {
     Object oKey = readObject(ts);
     if(oKey.failed()) {
-      error = "Error reading key";
+      error = "Error reading key" + report_position(ts);
       break;
     }
     if(!oKey.is<Name>()) {
-      error = "Key not a name";
+      error = "Key not a name" + report_position(ts);
       break;
     }
     std::string key = oKey.get<Name>();
     if(dict.find(key) != dict.end()) {
-      error = "Dulpicite key";
+      error = "Duplicite key /" + key + report_position(ts);
       break;
     }
     Object oVal = (ts.peek() == ">>")
@@ -340,16 +341,13 @@ Object parseDict(TokenParser& ts) {
     dict.emplace(std::move(key), std::move(oVal));
     // Yes, we want to store the value even if parsing failed
     if(failed) {
-      error = "Error reading value";
+      error = "Error reading value" + report_position(ts);
       break;
     }
   }
-  ts.consume();
-  Dictionary oDict{std::move(dict), std::move(error)};
-  if(ts.peek() == "stream")
-    return parseStream(ts, std::move(oDict));
-  else
-    return {std::move(oDict)};
+  if(ts.peek() == ">>")
+    ts.consume();
+  return {Dictionary{std::move(dict), std::move(error)}};
 }
 
 Object parseStream(TokenParser& ts, Dictionary&& dict) {
@@ -423,6 +421,8 @@ TopLevelObject parseNamedObject(TokenParser& ts) {
   if(ts.read() != "obj")
     return {Invalid{"Misshaped named object header (obj)" + report_position(ts)}};
   Object contents = readObject(ts);
+  if(contents.is<Dictionary>() && ts.peek() == "stream")
+    contents = parseStream(ts, std::move(contents).get<Dictionary>());
   std::string error{};
   if(std::string s = ts.read(); s != "endobj") {
     if(s.empty())
@@ -498,7 +498,6 @@ Object readObject(TokenParser& ts) {
     ts.consume();
     return parseNumberIndir(ts, std::move(n1));
   } else {
-    ts.consume();
     return {Invalid{"Garbage or unexpected token" + report_position(ts)}};
   }
 }
@@ -520,6 +519,8 @@ TopLevelObject readTopLevelObject(std::streambuf& stream) {
 }
 
 } // namespace pdf::parser
+
+/***** std::istream interface *****/
 
 std::istream& operator>> (std::istream& is, Version& version) {
   std::istream::sentry s(is);

@@ -61,6 +61,9 @@ class tagged_union : public ObjBase {
   template<typename T>
   const T& get() const { return std::get<T>(contents); }
 
+  template<typename T>
+  T&& get() && { return std::move(std::get<T>(contents)); }
+
   bool failed() const override {
     return std::visit([](auto&& arg) { return arg.failed(); }, contents);
   }
