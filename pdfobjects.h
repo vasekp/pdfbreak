@@ -77,28 +77,7 @@ class tagged_union : public ObjBase {
 
 /***** PDF object types *****/
 
-class Null;
-class Boolean;
-class Numeric;
-class String;
-class Name;
-class Array;
-class Dictionary;
-class Stream;
-class Indirect;
-class Invalid;
-
-using Object = internal::tagged_union<
-    Null,
-    Boolean,
-    Numeric,
-    String,
-    Name,
-    Array,
-    Dictionary,
-    Stream,
-    Indirect,
-    Invalid>;
+struct Object;
 
 class Null : public internal::ObjBase {
   public:
@@ -107,7 +86,7 @@ class Null : public internal::ObjBase {
 
 class Boolean : public internal::ObjBase {
   bool val;
-  
+
   public:
   Boolean(bool val_) : val(val_) { }
 
@@ -235,18 +214,24 @@ class Invalid : public internal::ObjBase {
   void dump(std::ostream& os, unsigned off) const override;
 };
 
+using _Object = internal::tagged_union<
+    Null,
+    Boolean,
+    Numeric,
+    String,
+    Name,
+    Array,
+    Dictionary,
+    Stream,
+    Indirect,
+    Invalid>;
+
+struct Object : public _Object {
+  using _Object::_Object;
+  bool operator!() const { return is<Null>(); }
+};
+
 /***** "Top-level" objects *****/
-
-class NamedObject;
-class XRefTable;
-class StartXRef;
-
-using TopLevelObject = internal::tagged_union<
-    Invalid, // needs to be first for default construction,
-      // NB it makes sense that an empty TLO is invalid
-    NamedObject,
-    XRefTable,
-    StartXRef>;
 
 class NamedObject : public internal::ObjBase {
   unsigned long num;
@@ -297,6 +282,19 @@ class StartXRef : public internal::ObjBase {
 
   void dump(std::ostream& os, unsigned off) const override;
 };
+
+using _TopLevelObject = internal::tagged_union<
+    Invalid, // needs to be first for default construction,
+      // NB it makes sense that an empty TLO is invalid
+    NamedObject,
+    XRefTable,
+    StartXRef>;
+
+struct TopLevelObject : public _TopLevelObject {
+  using _TopLevelObject::_TopLevelObject;
+};
+
+/***** iostream interface *****/
 
 inline std::ostream& operator<< (std::ostream& os, const internal::ObjBase& obj) {
   obj.dump(os, 0);

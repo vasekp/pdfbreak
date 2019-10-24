@@ -139,7 +139,7 @@ void Dictionary::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, ">>");
 }
 
-static const Object null{Null{}};
+static const Object null{};
 
 const Object& Dictionary::lookup(const std::string& key) const {
   auto it = val.find(key);

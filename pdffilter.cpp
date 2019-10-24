@@ -108,7 +108,7 @@ std::streambuf::int_type DeflateDecoder::underflow() {
 DecoderChain::DecoderChain(const Stream& stm) : chain{}, inner{} {
   chain.emplace_back(std::make_unique<std::stringbuf>(stm.data()));
   const auto& filters = stm.dict().lookup("Filter");
-  if(filters.is<Null>())
+  if(!filters)
     return;
   else if(filters.is<Name>()) {
     const auto& filter = filters.get<Name>();
