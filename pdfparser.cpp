@@ -89,7 +89,7 @@ std::string readLine(std::streambuf& stream) {
 std::string TokenParser::underflow() {
   char c;
   _lastLen = 0;
-  for(auto cInt = _stream.sgetc(); ; cInt = _stream.snextc()) {
+  for(auto cInt = _stream->sgetc(); ; cInt = _stream->snextc()) {
     if(cInt == std::streambuf::traits_type::eof())
       return "";
     c = std::streambuf::traits_type::to_char_type(cInt);
@@ -99,22 +99,22 @@ std::string TokenParser::underflow() {
   switch(charType(c)) {
     case CharType::delim:
       if(c == '%') {
-        skipToNL(_stream);
+        skipToNL(*_stream);
         return underflow();
       } else if(c == '<' || c == '>') {
-        if(auto cInt = _stream.snextc(); std::streambuf::traits_type::to_char_type(cInt) == c) {
-          _stream.sbumpc();
+        if(auto cInt = _stream->snextc(); std::streambuf::traits_type::to_char_type(cInt) == c) {
+          _stream->sbumpc();
           _lastLen = 2;
           return {c, c};
         }
       } else
-        _stream.sbumpc(); // For < and > this was already done by snexts()
+        _stream->sbumpc(); // For < and > this was already done by snexts()
       _lastLen = 1;
       return {c};
     case CharType::regular:
       {
         std::string s{c};
-        for(auto cInt = _stream.snextc(); cInt != std::streambuf::traits_type::eof(); cInt = _stream.snextc()) {
+        for(auto cInt = _stream->snextc(); cInt != std::streambuf::traits_type::eof(); cInt = _stream->snextc()) {
           c = std::streambuf::traits_type::to_char_type(cInt);
           if(charType(c) == CharType::regular)
             s.push_back(c);
@@ -160,7 +160,7 @@ Object parseStringLiteral(TokenParser& ts) {
   std::string s = ts.read();
   assert(s == "(");
   assert(ts.empty());
-  std::streambuf& stream = ts.stream();
+  std::streambuf& stream = *ts.stream();
   std::string ret{};
   std::string error{};
   unsigned parens = 0;
@@ -256,7 +256,7 @@ Object parseStringHex(TokenParser& ts) {
   std::string s = ts.read();
   assert(s == "<");
   assert(ts.empty());
-  std::streambuf& stream = ts.stream();
+  std::streambuf& stream = *ts.stream();
   std::string ret{};
   std::string error{};
   unsigned odd = 0;
@@ -354,7 +354,7 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
   std::string s = ts.read();
   assert(s == "stream");
   assert(ts.empty());
-  std::streambuf& stream = ts.stream();
+  std::streambuf& stream = *ts.stream();
   skipToLF(stream);
   std::string contents{};
   std::string error{};
@@ -438,7 +438,7 @@ TopLevelObject parseXRefTable(TokenParser& ts) {
   std::string s = ts.read();
   assert(s == "xref");
   assert(ts.empty());
-  std::streambuf& stream = ts.stream();
+  std::streambuf& stream = *ts.stream();
   skipToNL(stream);
   std::vector<XRefTable::Section> sections{};
   while(true) {
@@ -502,9 +502,7 @@ Object readObject(TokenParser& ts) {
   }
 }
 
-TopLevelObject readTopLevelObject(std::streambuf& stream) {
-  using namespace parser;
-  TokenParser ts{stream};
+TopLevelObject readTopLevelObject(TokenParser& ts) {
   std::string t = ts.peek();
   if(t == "") // EOF
     return {Null{}};
@@ -546,7 +544,8 @@ std::istream& operator>> (std::istream& is, Version& version) {
 std::istream& operator>> (std::istream& is, TopLevelObject& tlo) {
   std::istream::sentry s(is);
   if(s) {
-    tlo = parser::readTopLevelObject(*is.rdbuf());
+    parser::TokenParser ts{is.rdbuf()};
+    tlo = parser::readTopLevelObject(ts);
     if(tlo.is<Invalid>()) {
       if(!tlo)
         is.setstate(std::ios::eofbit);

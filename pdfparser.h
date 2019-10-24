@@ -14,17 +14,17 @@ namespace pdf {
 namespace parser {
 
 class TokenParser {
-  std::streambuf& _stream;
+  std::streambuf* _stream;
   std::stack<std::string> _stack;
   std::size_t _lastLen;
 
   public:
-  TokenParser(std::streambuf& stream_) : _stream(stream_), _stack(), _lastLen(0) { }
+  TokenParser(std::streambuf* stream_) : _stream{stream_}, _stack{}, _lastLen{0} { }
 
   ~TokenParser() {
     assert(_stack.size() <= 1);
     if(_stack.size() > 0)
-      _stream.pubseekoff(-_lastLen, std::ios_base::cur);
+      _stream->pubseekoff(-_lastLen, std::ios_base::cur);
   }
 
   std::string read() {
@@ -54,9 +54,15 @@ class TokenParser {
     return _stack.empty();
   }
 
-  std::streambuf& stream() {
+  std::streambuf* stream() {
+    assert(empty());
     reset();
     return _stream;
+  }
+
+  void newstream(std::streambuf* stream_) {
+    _stream = stream_;
+    reset();
   }
 
   // Always call after manipulating the underlying stream.
@@ -66,7 +72,7 @@ class TokenParser {
   }
 
   std::size_t pos() const {
-    auto offset = _stream.pubseekoff(0, std::ios_base::cur);
+    auto offset = _stream->pubseekoff(0, std::ios_base::cur);
     if(offset == (decltype(offset))(-1))
       throw std::logic_error("Can't determine position in provided stream");
     return std::size_t(offset);
@@ -102,7 +108,7 @@ TopLevelObject parseXRefTable(TokenParser& ts);
 TopLevelObject parseStartXRef(TokenParser& ts);
 
 Object readObject(TokenParser&);
-TopLevelObject readTopLevelObject(std::streambuf&);
+TopLevelObject readTopLevelObject(TokenParser&);
 
 } // namespace pdf::parser
 

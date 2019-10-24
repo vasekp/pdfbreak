@@ -138,6 +138,7 @@ class Name : public internal::ObjBase {
   Name(V&& val_) : val(std::forward<V>(val_)) { }
 
   operator const std::string&() const { return val; }
+  bool operator== (const char* cstr) const { return val == cstr; }
 
   void dump(std::ostream& os, unsigned off) const override;
 };
@@ -227,7 +228,7 @@ using _Object = internal::tagged_union<
 
 struct Object : public _Object {
   using _Object::_Object;
-  bool operator!() const { return is<Null>(); }
+  operator bool() const { return !is<Null>(); }
 };
 
 /***** "Top-level" objects *****/
@@ -291,7 +292,7 @@ using _TopLevelObject = internal::tagged_union<
 
 struct TopLevelObject : public _TopLevelObject {
   using _TopLevelObject::_TopLevelObject;
-  bool operator!() const { return is<Null>(); }
+  operator bool() const { return !is<Null>(); }
 };
 
 /***** iostream interface *****/

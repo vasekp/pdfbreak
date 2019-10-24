@@ -7,6 +7,7 @@
 #include "pdfobjects.h"
 #include "pdfparser.h"
 #include "pdffilter.h"
+#include "pdfobjstream.h"
 
 std::tuple<std::string, bool> save_data(const pdf::Stream& stm, const std::string& basename) {
   try {
@@ -51,6 +52,38 @@ std::tuple<std::string, bool> save_data(const pdf::Stream& stm, const std::strin
   }
 }
 
+void unpack_objstm(const pdf::Stream& stm, const std::string& basename) {
+  std::clog << "Entering ObjStream\n";
+  try {
+    pdf::parser::ObjStream objstm{stm};
+    pdf::TopLevelObject tlo;
+    while(tlo = objstm.read()) {
+      if(tlo.is<pdf::NamedObject>()) {
+        auto [num, gen] = tlo.get<pdf::NamedObject>().numgen();
+        std::string filename = [&basename, num] {
+          std::ostringstream oss{};
+          oss << basename << '-' << num << ".obj";
+          return oss.str();
+        }();
+        std::ofstream ofs{filename};
+        ofs << tlo << '\n';
+        std::clog << "Saved: " << filename << (tlo.failed() ? " (errors)\n" : "\n");
+      }
+      if(tlo.failed()) {
+        std::cerr << "!!! Error reading from ObjStream\n";
+        return;
+      }
+    }
+    std::clog << "Reading ObjStream successful\n";
+  } catch(pdf::codec::decode_error& e) {
+    std::cerr << "!!! " << e.what() << '\n';
+  } catch(pdf::parser::objstm_error& e) {
+    std::cerr << "!!! " << e.what() << '\n';
+    auto [filename, errors] = save_data(stm, basename);
+    std::clog << "Saved data: " << filename << (errors ? " (errors)\n" : "\n");
+  }
+}
+
 int main(int argc, char* argv[]) {
   if(argc != 2) {
     std::cerr << "Usage: " << argv[0] << " filename.pdf\n";
@@ -90,7 +123,11 @@ int main(int argc, char* argv[]) {
       std::clog << "Saved: " << filename << (tlo.failed() ? " (errors)\n" : "\n");
       const auto& obj = nmo.object();
       if(obj.is<pdf::Stream>()) {
-        if(decompress) {
+        if(const auto& val = obj.get<pdf::Stream>().dict().lookup("Type");
+            val.is<pdf::Name>() && val.get<pdf::Name>() == "ObjStm") {
+          unpack_objstm(obj.get<pdf::Stream>(), basename);
+        }
+        else if(decompress) {
           auto [filename, errors] = save_data(obj.get<pdf::Stream>(), basename);
           std::clog << "Saved data: " << filename << (errors ? " (errors)\n" : "\n");
         }
