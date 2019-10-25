@@ -205,7 +205,6 @@ class Invalid : public internal::ObjBase {
   std::string error;
 
   public:
-  Invalid() = default;
   Invalid(std::string&& error_) : error(std::move(error_)) { }
 
   const std::string& get_error() const { return error; }
@@ -284,14 +283,15 @@ class StartXRef : public internal::ObjBase {
 };
 
 using _TopLevelObject = internal::tagged_union<
-    Invalid, // needs to be first for default construction,
-      // NB it makes sense that an empty TLO is invalid
+    Null, // EOF
     NamedObject,
     XRefTable,
-    StartXRef>;
+    StartXRef,
+    Invalid>;
 
 struct TopLevelObject : public _TopLevelObject {
   using _TopLevelObject::_TopLevelObject;
+  bool operator!() const { return is<Null>(); }
 };
 
 /***** iostream interface *****/

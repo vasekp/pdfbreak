@@ -164,7 +164,7 @@ Object parseStringLiteral(TokenParser& ts) {
   std::string ret{};
   std::string error{};
   unsigned parens = 0;
-  
+
   for(auto cInt = stream.sbumpc(); ; cInt = stream.sbumpc()) {
     if(cInt == std::streambuf::traits_type::eof()) {
       error = "End of input while reading string";
@@ -507,7 +507,7 @@ TopLevelObject readTopLevelObject(std::streambuf& stream) {
   TokenParser ts{stream};
   std::string t = ts.peek();
   if(t == "") // EOF
-    return {Invalid{}};
+    return {Null{}};
   else if(Numeric{t}.uintegral())
     return parseNamedObject(ts);
   else if(t == "xref")
@@ -548,7 +548,7 @@ std::istream& operator>> (std::istream& is, TopLevelObject& tlo) {
   if(s) {
     tlo = parser::readTopLevelObject(*is.rdbuf());
     if(tlo.is<Invalid>()) {
-      if(tlo.get<Invalid>().get_error().empty())
+      if(!tlo)
         is.setstate(std::ios::eofbit);
       else
         is.setstate(std::ios::failbit);
