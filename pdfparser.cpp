@@ -68,7 +68,7 @@ std::string chopNL(std::string&& in) {
   return in;
 }
 
-std::string format_position(std::size_t offset) {
+std::string format_position(std::streamoff offset) {
   char buf[20];
   std::snprintf(buf, 50, "%zu", offset);
   return {buf};
@@ -442,11 +442,12 @@ TopLevelObject parseXRefTable(TokenParser& ts) {
   skipToNL(stream);
   std::vector<XRefTable::Section> sections{};
   while(true) {
-    s = ts.read();
+    s = ts.peek();
     if(s.empty()) // EOF
       return {Invalid{"End of input while reading xref table"}};
     else if(s == "trailer")
       break;
+    ts.consume();
     Numeric start{s};
     if(!start.uintegral())
       return {Invalid{"Broken xref subsection header (start)" + report_position(ts)}};
@@ -460,8 +461,15 @@ TopLevelObject parseXRefTable(TokenParser& ts) {
       return {Invalid{"End of input while reading xref table"}};
     sections.push_back({start.val_ulong(), count.val_ulong(), std::move(s)});
   }
+  return {XRefTable{std::move(sections)}};
+}
+
+TopLevelObject parseTrailer(TokenParser& ts) {
+  std::string s = ts.read();
+  assert(s == "trailer");
+  auto start = ts.lastpos();
   Object trailer = readObject(ts);
-  return {XRefTable{std::move(sections), std::move(trailer)}};
+  return {Trailer{std::move(trailer), start}};
 }
 
 TopLevelObject parseStartXRef(TokenParser& ts) {
@@ -470,7 +478,7 @@ TopLevelObject parseStartXRef(TokenParser& ts) {
   Numeric num{ts.read()};
   if(!num.uintegral())
     return {Invalid{"Broken startxref" + report_position(ts)}};
-  return {StartXRef{num.val_ulong()}};
+  return {StartXRef{static_cast<std::streamoff>(num.val_ulong())}};
 }
 
 
@@ -510,6 +518,8 @@ TopLevelObject readTopLevelObject(TokenParser& ts) {
     return parseNamedObject(ts);
   else if(t == "xref")
     return parseXRefTable(ts);
+  else if(t == "trailer")
+    return parseTrailer(ts);
   else if(t == "startxref")
     return parseStartXRef(ts);
   else

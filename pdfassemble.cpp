@@ -24,37 +24,32 @@ int main(int argc, char* argv[]) {
   ofs << "%" << b << b << b << b << '\n';
 
   std::vector<std::string> fnames{&argv[1], &argv[argc]};
-  std::filebuf ifbuf;
   std::map<pdf::ObjRef, std::streamoff> map{};
-  pdf::TopLevelObject tlo{};
-  pdf::Object trailer{};
+  pdf::TopLevelObject trailer{};
   for(const auto& fname : fnames) {
     std::ifstream ifs{fname, std::ios_base::in | std::ios_base::binary};
     if(!ifs) {
       std::cerr << "Can't open " << fname << " for reading.\n";
       continue;
     }
-    while(true) {
-      ifs >> tlo;
-      if(ifs.eof())
-        break;
+    pdf::TopLevelObject tlo{};
+    while(ifs >> tlo) {
       if(tlo.is<pdf::NamedObject>()) {
         auto& nmo = tlo.get<pdf::NamedObject>();
         auto [num, gen] = nmo.numgen();
         auto offset = ofs.tellp();
         map[{num, gen}] = offset;
         ofs << tlo << '\n';
-      } else if(tlo.is<pdf::XRefTable>()) {
-        trailer = tlo.get<pdf::XRefTable>().trailer();
+      } else if(tlo.is<pdf::XRefTable>())
         std::clog << "Skipping xref table\n";
-      } else if(tlo.is<pdf::StartXRef>()) {
+      else if(tlo.is<pdf::Trailer>())
+        trailer = tlo;
+      else if(tlo.is<pdf::StartXRef>())
         std::clog << "Skipping startxref marker\n";
-      } else if(tlo.is<pdf::Invalid>()) {
-        std::string error = tlo.get<pdf::Invalid>().get_error();
-        std::clog << "Error reading " << fname << " at " << ifs.tellg() << ": "
-          << error << '\n';
-        break;
-      }
+    }
+    if(tlo.failed()) {
+      ifs.clear();
+      std::clog << "Error reading " << fname << " at " << ifs.tellg() << '\n';
     }
   }
   unsigned long max = 0;
@@ -76,7 +71,7 @@ int main(int argc, char* argv[]) {
       }
     }
   }
-  auto startxref = ofs.tellp();
+  auto xrefstart = ofs.tellp();
   ofs << "xref\n"
     << "0 " << xrefs.size() << '\n';
   for(const auto [off, gen, used] : xrefs) {
@@ -84,8 +79,8 @@ int main(int argc, char* argv[]) {
     std::snprintf(buf, sizeof(buf), "%010lu %05lu %c \n", off, gen, used?'n':'f');
     ofs << buf << std::flush;
   }
-  ofs << "trailer\n" << trailer /*TODO: not null*/ << '\n'
-    << "startxref\n"
-    << startxref << '\n'
-    << "%%EOF";
+  if(!trailer)
+    std::cerr << "!!! No trailer found; expect invalid PDF\n";
+  pdf::TopLevelObject startxref{pdf::StartXRef{xrefstart}};
+  ofs << trailer << '\n' << startxref << '\n';
 }

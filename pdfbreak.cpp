@@ -103,7 +103,6 @@ int main(int argc, char* argv[]) {
     ifs.clear();
   }
 
-  unsigned trailercnt = 0;
   pdf::TopLevelObject tlo{};
   while(true) {
     ifs >> tlo;
@@ -134,12 +133,13 @@ int main(int argc, char* argv[]) {
       }
       ifs.clear();
     } else if(tlo.is<pdf::XRefTable>()) {
-      const pdf::Object& trailer = tlo.get<pdf::XRefTable>().trailer();
       std::clog << "Skipping xref table\n";
+    } else if(tlo.is<pdf::Trailer>()) {
+      const auto& trailer = tlo.get<pdf::Trailer>();
       std::ostringstream oss{};
-      oss << argv[1] << "-trailer" << ++trailercnt << ".obj";
+      oss << argv[1] << "-trailer-" << trailer.start() << ".obj";
       std::ofstream ofs{oss.str()};
-      ofs << "trailer\n" << trailer << '\n';
+      ofs << trailer << '\n';
       std::clog << "Saving: " << oss.str() << '\n';
     } else if(tlo.is<pdf::StartXRef>()) {
       std::clog << "Skipping startxref marker\n";

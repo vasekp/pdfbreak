@@ -71,14 +71,14 @@ class TokenParser {
     _lastLen = 0;
   }
 
-  std::size_t pos() const {
-    auto offset = _stream->pubseekoff(0, std::ios_base::cur);
+  std::streamoff pos() const {
+    std::streamoff offset = _stream->pubseekoff(0, std::ios_base::cur);
     if(offset == (decltype(offset))(-1))
       throw std::logic_error("Can't determine position in provided stream");
-    return std::size_t(offset);
+    return offset;
   }
 
-  std::size_t lastpos() const {
+  std::streamoff lastpos() const {
     return pos() - _lastLen;
   }
 
@@ -105,6 +105,7 @@ Object parseDict(TokenParser& ts);
 
 TopLevelObject parseNamedObject(TokenParser& ts);
 TopLevelObject parseXRefTable(TokenParser& ts);
+TopLevelObject parseTrailer(TokenParser& ts);
 TopLevelObject parseStartXRef(TokenParser& ts);
 
 Object readObject(TokenParser&);

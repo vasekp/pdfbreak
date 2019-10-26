@@ -263,22 +263,34 @@ class XRefTable : public internal::ObjBase {
 
 private:
   std::vector<Section> _table;
-  Object _trailer;
 
   public:
-  XRefTable(std::vector<Section>&& table_, Object&& trailer_)
-    : _table(std::move(table_)), _trailer(std::move(trailer_)) { }
-
-  const Object& trailer() const { return _trailer; }
+  XRefTable(std::vector<Section>&& table_)
+    : _table(std::move(table_)) { }
 
   void dump(std::ostream& os, unsigned off) const override;
 };
 
+class Trailer : public internal::ObjBase {
+  Object _dict;
+  std::streamoff _start;
+
+public:
+  Trailer(Object&& dict_, std::streamoff start_)
+    : _dict(std::move(dict_)), _start(start_) { }
+
+  const Object& dict() const { return _dict; }
+  std::streamoff start() const { return _start; }
+
+  bool failed() const override { return _dict.failed(); }
+  void dump(std::ostream& os, unsigned off) const override;
+};
+
 class StartXRef : public internal::ObjBase {
-  unsigned long val;
+  std::streamoff val;
 
   public:
-  StartXRef(unsigned long val_) : val(val_) { }
+  StartXRef(std::streamoff val_) : val(val_) { }
 
   void dump(std::ostream& os, unsigned off) const override;
 };
@@ -287,6 +299,7 @@ using _TopLevelObject = internal::tagged_union<
     Null, // EOF
     NamedObject,
     XRefTable,
+    Trailer,
     StartXRef,
     Invalid>;
 
