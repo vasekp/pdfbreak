@@ -175,7 +175,7 @@ void NamedObject::dump(std::ostream& os, unsigned off) const {
   if(!error.empty()) {
     print_offset(os, off, "% !!! " + error + "\n");
   }
-  print_offset(os, off, "endobj");
+  print_offset(os, off, "endobj\n");
 }
 
 void XRefTable::dump(std::ostream& os, unsigned off) const {
@@ -188,10 +188,11 @@ void XRefTable::dump(std::ostream& os, unsigned off) const {
 void Trailer::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, "trailer\n");
   _dict.dump(os, off+1);
+  os << '\n';
 }
 
 void StartXRef::dump(std::ostream& os, unsigned) const {
-  os << "startxref\n" << val << "\n%%EOF";
+  os << "startxref\n" << val << "\n%%EOF\n";
 }
 
 } //namespace pdf

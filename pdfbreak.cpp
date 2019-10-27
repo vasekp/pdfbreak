@@ -66,7 +66,7 @@ void unpack_objstm(const pdf::Stream& stm, const std::string& basename) {
         return oss.str();
       }();
       std::ofstream ofs{filename};
-      ofs << tlo << '\n';
+      ofs << tlo;
       std::clog << "Saved: " << filename << (tlo.failed() ? " (errors)\n" : "\n");
     }
     if(tlo.failed()) {
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
       }();
       std::string filename = basename + ".obj";
       std::ofstream ofs{filename};
-      ofs << tlo << '\n';
+      ofs << tlo;
       std::clog << "Saved: " << filename << (tlo.failed() ? " (errors)\n" : "\n");
       const auto& obj = nmo.object();
       if(obj.is<pdf::Stream>()) {
@@ -138,7 +138,7 @@ int main(int argc, char* argv[]) {
       std::ostringstream oss{};
       oss << argv[1] << "-trailer-" << trailer.start() << ".obj";
       std::ofstream ofs{oss.str()};
-      ofs << trailer << '\n';
+      ofs << trailer;
       std::clog << "Saving: " << oss.str() << '\n';
     } else if(tlo.is<pdf::StartXRef>()) {
       std::clog << "Skipping startxref marker\n";

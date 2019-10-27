@@ -16,12 +16,8 @@ int main(int argc, char* argv[]) {
   }
 
   std::string ofname = "out.pdf"; // TODO
-  pdf::Version ver = {1, 7};
-
   std::ofstream ofs{ofname};
-  ofs << "%PDF-" << ver.major << '.' << ver.minor << '\n';
-  unsigned char b = 130;
-  ofs << "%" << b << b << b << b << '\n';
+  ofs << pdf::Version{1, 7};
 
   std::vector<std::string> fnames{&argv[1], &argv[argc]};
   std::map<pdf::ObjRef, std::streamoff> map{};
@@ -39,7 +35,7 @@ int main(int argc, char* argv[]) {
         auto [num, gen] = nmo.numgen();
         auto offset = ofs.tellp();
         map[{num, gen}] = offset;
-        ofs << tlo << '\n';
+        ofs << tlo;
       } else if(tlo.is<pdf::XRefTable>())
         std::clog << "Skipping xref table\n";
       else if(tlo.is<pdf::Trailer>())
@@ -82,5 +78,5 @@ int main(int argc, char* argv[]) {
   if(!trailer)
     std::cerr << "!!! No trailer found; expect invalid PDF\n";
   pdf::TopLevelObject startxref{pdf::StartXRef{xrefstart}};
-  ofs << trailer << '\n' << startxref << '\n';
+  ofs << trailer << startxref;
 }

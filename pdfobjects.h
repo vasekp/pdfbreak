@@ -7,6 +7,7 @@
 #include <map>
 #include <variant>
 #include <utility>
+#include <random>
 
 namespace pdf {
 
@@ -312,6 +313,17 @@ struct TopLevelObject : public _TopLevelObject {
 
 inline std::ostream& operator<< (std::ostream& os, const internal::ObjBase& obj) {
   obj.dump(os, 0);
+  return os;
+}
+
+inline std::ostream& operator<< (std::ostream& os, Version v) {
+  os << "%PDF-" << v.major << '.' << v.minor << '\n';
+  std::random_device rd{};
+  std::uniform_int_distribution<unsigned char> dist{128, 255};
+  os << '%';
+  for(int i = 0; i < 4; i++)
+    os << dist(rd);
+  os << '\n';
   return os;
 }
 
