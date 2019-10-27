@@ -228,7 +228,7 @@ using _Object = internal::tagged_union<
 
 struct Object : public _Object {
   using _Object::_Object;
-  operator bool() const { return !is<Null>(); }
+  operator bool() const { return !is<Null>() && !is<Invalid>(); }
 };
 
 /***** "Top-level" objects *****/
@@ -305,7 +305,7 @@ using _TopLevelObject = internal::tagged_union<
 
 struct TopLevelObject : public _TopLevelObject {
   using _TopLevelObject::_TopLevelObject;
-  operator bool() const { return !is<Null>(); }
+  operator bool() const { return !is<Null>() && !is<Invalid>(); }
 };
 
 /***** iostream interface *****/

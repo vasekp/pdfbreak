@@ -58,21 +58,20 @@ void unpack_objstm(const pdf::Stream& stm, const std::string& basename) {
     pdf::parser::ObjStream objstm{stm};
     pdf::TopLevelObject tlo;
     while(tlo = objstm.read()) {
-      if(tlo.is<pdf::NamedObject>()) {
-        auto [num, gen] = tlo.get<pdf::NamedObject>().numgen();
-        std::string filename = [&basename, num] {
-          std::ostringstream oss{};
-          oss << basename << '-' << num << ".obj";
-          return oss.str();
-        }();
-        std::ofstream ofs{filename};
-        ofs << tlo << '\n';
-        std::clog << "Saved: " << filename << (tlo.failed() ? " (errors)\n" : "\n");
-      }
-      if(tlo.failed()) {
-        std::cerr << "!!! Error reading from ObjStream\n";
-        return;
-      }
+      assert(tlo.is<pdf::NamedObject>());
+      auto [num, gen] = tlo.get<pdf::NamedObject>().numgen();
+      std::string filename = [&basename, num] {
+        std::ostringstream oss{};
+        oss << basename << '-' << num << ".obj";
+        return oss.str();
+      }();
+      std::ofstream ofs{filename};
+      ofs << tlo << '\n';
+      std::clog << "Saved: " << filename << (tlo.failed() ? " (errors)\n" : "\n");
+    }
+    if(tlo.failed()) {
+      std::cerr << "!!! Error reading from ObjStream\n";
+      return;
     }
     std::clog << "Reading ObjStream successful\n";
   } catch(pdf::codec::decode_error& e) {

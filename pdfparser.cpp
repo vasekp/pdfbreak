@@ -556,12 +556,14 @@ std::istream& operator>> (std::istream& is, TopLevelObject& tlo) {
   if(s) {
     parser::TokenParser ts{is.rdbuf()};
     tlo = parser::readTopLevelObject(ts);
-    if(tlo.is<Invalid>()) {
-      if(!tlo)
-        is.setstate(std::ios::eofbit);
-      else
+    // !tlo: Null or Invalid
+    if(!tlo) {
+      if(tlo.failed()) // Invalid (nothing salvaged)
         is.setstate(std::ios::failbit);
+      else // Null (EOF)
+        is.setstate(std::ios::eofbit);
     } else if(tlo.failed())
+      // Object usable but partially parsed
       is.setstate(std::ios::badbit);
   }
   return is;
