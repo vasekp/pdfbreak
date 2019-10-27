@@ -7,7 +7,8 @@
 #include <istream>
 #include <cassert>
 
-#include "pdfobjects.h"
+#include "pdfbase.h"
+#include "pdffile.h"
 
 namespace pdf {
 
@@ -110,12 +111,14 @@ TopLevelObject parseStartXRef(TokenParser& ts);
 
 Object readObject(TokenParser&);
 TopLevelObject readTopLevelObject(TokenParser&);
+bool skipToEndobj(std::streambuf& stream);
 
 } // namespace pdf::parser
 
-std::istream& operator>> (std::istream& is, Version& version);
+/***** iostream interface *****/
+
 std::istream& operator>> (std::istream& is, TopLevelObject& tlo);
-std::istream& skipToEndObj(std::istream&);
+std::istream& skipToEndObj(std::istream& is);
 
 } // namespace pdf
 

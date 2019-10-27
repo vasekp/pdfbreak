@@ -1,10 +1,10 @@
-#ifndef PDFOBJSTREAM_H
-#define PDFOBJSTREAM_H
+#ifndef PDF_OBJSTREAM_H
+#define PDF_OBJSTREAM_H
 
 #include <stdexcept>
 #include <vector>
 
-#include "pdfobjects.h"
+#include "pdfbase.h"
 #include "pdfparser.h"
 #include "pdffilter.h"
 

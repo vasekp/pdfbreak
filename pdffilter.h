@@ -5,7 +5,7 @@
 #include <streambuf>
 #include <vector>
 
-#include "pdfobjects.h"
+#include "pdfbase.h"
 
 namespace pdf {
 

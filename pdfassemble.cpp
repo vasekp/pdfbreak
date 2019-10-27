@@ -6,8 +6,7 @@
 #include <tuple>
 #include <cstdio>
 
-#include "pdfobjects.h"
-#include "pdfparser.h"
+#include "pdf.h"
 
 int main(int argc, char* argv[]) {
   if(argc < 2) {

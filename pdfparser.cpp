@@ -1,7 +1,6 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "pdfobjects.h"
 #include "pdfparser.h"
 
 namespace pdf {
@@ -396,21 +395,6 @@ Object parseStream(TokenParser& ts, Dictionary&& dict) {
 
 /***** Top level object parsing *****/
 
-bool skipToEndobj(std::streambuf& stream) {
-  const std::string sep = "endobj";
-  for(std::string s = readToNL(stream); !s.empty(); s = readToNL(stream)) {
-    if(auto off = s.find(sep); off != std::string::npos) {
-      if(off + sep.length() == s.length()) // separator at end of line: OK
-        return true;
-      stream.pubseekoff(- s.length() + off + sep.length(), std::ios_base::cur);
-      if(char after = std::streambuf::traits_type::to_char_type(stream.sgetc());
-          charType(after) != CharType::regular)
-        return true;
-    }
-  }
-  return false;
-}
-
 TopLevelObject parseNamedObject(TokenParser& ts) {
   Numeric num{ts.read()};
   if(!num.uintegral())
@@ -481,6 +465,7 @@ TopLevelObject parseStartXRef(TokenParser& ts) {
   return {StartXRef{static_cast<std::streamoff>(num.val_ulong())}};
 }
 
+/***** High level parsing *****/
 
 Object readObject(TokenParser& ts) {
   std::string t = ts.peek();
@@ -526,30 +511,24 @@ TopLevelObject readTopLevelObject(TokenParser& ts) {
     return {Invalid{"Garbage or unexpected token" + report_position(ts)}};
 }
 
+bool skipToEndobj(std::streambuf& stream) {
+  const std::string sep = "endobj";
+  for(std::string s = readToNL(stream); !s.empty(); s = readToNL(stream)) {
+    if(auto off = s.find(sep); off != std::string::npos) {
+      if(off + sep.length() == s.length()) // separator at end of line: OK
+        return true;
+      stream.pubseekoff(- s.length() + off + sep.length(), std::ios_base::cur);
+      if(char after = std::streambuf::traits_type::to_char_type(stream.sgetc());
+          charType(after) != CharType::regular)
+        return true;
+    }
+  }
+  return false;
+}
+
 } // namespace pdf::parser
 
-/***** std::istream interface *****/
-
-std::istream& operator>> (std::istream& is, Version& version) {
-  std::istream::sentry s(is);
-  if(s) {
-    std::streambuf& stream = *is.rdbuf();
-    if(std::streambuf::traits_type::to_char_type(stream.sgetc()) != '%') {
-      is.setstate(std::ios::failbit);
-      return is;
-    }
-    std::string line = parser::readLine(stream);
-    unsigned v1, v2;
-    int len;
-    if(sscanf(line.data(), "%%PDF-%u.%u%n", &v1, &v2, &len) != 2 || len != 8) {
-      is.setstate(std::ios::failbit);
-      return is;
-    }
-    version.major = v1;
-    version.minor = v2;
-  }
-  return is;
-}
+/***** iostream interface *****/
 
 std::istream& operator>> (std::istream& is, TopLevelObject& tlo) {
   std::istream::sentry s(is);

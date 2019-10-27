@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cassert>
 
-#include "pdfobjects.h"
+#include "pdfbase.h"
 
 namespace pdf {
 
@@ -163,36 +163,6 @@ void Stream::dump(std::ostream& os, unsigned off) const {
 void Indirect::dump(std::ostream& os, unsigned off) const {
   print_offset(os, off, "");
   os << num << ' ' << gen << " R";
-}
-
-/***** Implementation of PDF top level object classes *****/
-
-void NamedObject::dump(std::ostream& os, unsigned off) const {
-  print_offset(os, off, "");
-  os << num << ' ' << gen << " obj\n";
-  contents.dump(os, off+1);
-  os << '\n';
-  if(!error.empty()) {
-    print_offset(os, off, "% !!! " + error + "\n");
-  }
-  print_offset(os, off, "endobj\n");
-}
-
-void XRefTable::dump(std::ostream& os, unsigned off) const {
-  print_offset(os, off, "xref\n");
-  for(const auto& section : _table)
-    os << section.start << ' ' << section.count << '\n'
-      << section.data /* << '\n' already in data */;
-}
-
-void Trailer::dump(std::ostream& os, unsigned off) const {
-  print_offset(os, off, "trailer\n");
-  _dict.dump(os, off+1);
-  os << '\n';
-}
-
-void StartXRef::dump(std::ostream& os, unsigned) const {
-  os << "startxref\n" << val << "\n%%EOF\n";
 }
 
 } //namespace pdf

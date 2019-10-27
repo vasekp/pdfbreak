@@ -4,10 +4,7 @@
 #include <string>
 #include <tuple>
 
-#include "pdfobjects.h"
-#include "pdfparser.h"
-#include "pdffilter.h"
-#include "pdfobjstream.h"
+#include "pdf.h"
 
 std::tuple<std::string, bool> save_data(const pdf::Stream& stm, const std::string& basename) {
   try {
